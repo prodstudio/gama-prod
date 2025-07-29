@@ -2,8 +2,9 @@ import { createServerClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Edit, Trash2 } from "lucide-react"
+import { Plus, Edit } from "lucide-react"
 import Link from "next/link"
+import { DeletePlanButton } from "@/components/forms/delete-plan-button"
 
 export default async function PlanesPage() {
   const supabase = createServerClient()
@@ -76,9 +77,7 @@ export default async function PlanesPage() {
                       Editar
                     </Link>
                   </Button>
-                  <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700 bg-transparent">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <DeletePlanButton planId={plan.id} planName={plan.nombre} />
                 </div>
               </div>
             </CardContent>
