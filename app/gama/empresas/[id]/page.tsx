@@ -13,7 +13,19 @@ interface EmpresaDetailPageProps {
   }
 }
 
+// Función para validar si el ID es un UUID válido
+function isValidUUID(str: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  return uuidRegex.test(str)
+}
+
 export default async function EmpresaDetailPage({ params }: EmpresaDetailPageProps) {
+  // Verificar si el ID es válido antes de hacer la consulta
+  if (!isValidUUID(params.id)) {
+    console.error(`Invalid UUID format: ${params.id}`)
+    notFound()
+  }
+
   // TODO: Cuando reactivemos auth, validar que user.role === 'gama_admin'
 
   try {
