@@ -90,6 +90,7 @@ export async function updateEmpresaAction(id: string, formData: FormData) {
   }
 
   revalidatePath("/gama/empresas")
+  revalidatePath(`/gama/empresas/${id}`)
   redirect("/gama/empresas")
 }
 
