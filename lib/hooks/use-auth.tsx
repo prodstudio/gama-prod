@@ -7,7 +7,6 @@ import { createBrowserClient } from "@supabase/ssr"
 import type { Database, UserProfile } from "@/lib/types/database"
 import { cookieOptions } from "@/lib/supabase/config"
 
-// Creamos una instancia del cliente Supabase para el lado del cliente (navegador)
 const supabase = createBrowserClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -99,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(null)
   }
 
-  const contextValue = {
+  const contextValue: AuthContextType = {
     user,
     profile,
     loading,
