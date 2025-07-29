@@ -37,21 +37,18 @@ export function EmpresaForm({ empresa, planes, mode }: EmpresaFormProps) {
       formData.append("plan_id", "")
     }
 
-    try {
-      const result =
-        mode === "create" ? await createEmpresaAction(formData) : await updateEmpresaAction(empresa!.id, formData)
+    const result =
+      mode === "create" ? await createEmpresaAction(formData) : await updateEmpresaAction(empresa!.id, formData)
 
-      if (result?.error) {
-        setError(result.error)
-        if (result.fieldErrors) {
-          setFieldErrors(result.fieldErrors)
-        }
+    // Si result es undefined, significa que el redirect funcionó correctamente
+    if (result?.error) {
+      setError(result.error)
+      if (result.fieldErrors) {
+        setFieldErrors(result.fieldErrors)
       }
-    } catch (err) {
-      setError("Error inesperado. Intenta nuevamente.")
-    } finally {
       setIsLoading(false)
     }
+    // Si no hay error, el redirect ya ocurrió y no necesitamos hacer nada más
   }
 
   return (
