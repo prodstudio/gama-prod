@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin" // Cambiar a cliente admin
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Building, Users, UtensilsCrossed, ClipboardList } from "lucide-react"
+import { IngredientesStats } from "@/components/ingredientes/ingredientes-stats"
 
 export default async function GamaDashboard() {
   // TODO: Cuando reactivemos auth, validar que user.role === 'gama_admin'
@@ -91,6 +92,12 @@ export default async function GamaDashboard() {
             <p className="text-xs text-muted-foreground">Pedidos realizados</p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Estadísticas de ingredientes */}
+      <div>
+        <h2 className="text-xl font-semibold mb-4">Ingredientes</h2>
+        <IngredientesStats />
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">

@@ -2,10 +2,10 @@ import { supabaseAdmin } from "@/lib/supabase/admin"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Plus, Edit, Search } from "lucide-react"
+import { Plus, Edit } from "lucide-react"
 import Link from "next/link"
 import { DeleteIngredienteButton } from "@/components/forms/delete-ingrediente-button"
+import { IngredienteFilters } from "@/components/ingredientes/ingrediente-filters"
 
 interface IngredientesPageProps {
   searchParams: {
@@ -55,49 +55,7 @@ export default async function IngredientesPage({ searchParams }: IngredientesPag
       </div>
 
       {/* Filtros */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Filtros</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4 items-end">
-            <div className="flex-1">
-              <label htmlFor="search" className="text-sm font-medium mb-2 block">
-                Buscar por nombre
-              </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <Input
-                  id="search"
-                  name="search"
-                  placeholder="Buscar ingredientes..."
-                  defaultValue={searchParams.search || ""}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <div>
-              <label htmlFor="categoria" className="text-sm font-medium mb-2 block">
-                Categoría
-              </label>
-              <select
-                id="categoria"
-                name="categoria"
-                defaultValue={searchParams.categoria || "all"}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-              >
-                <option value="all">Todas las categorías</option>
-                {categoriasUnicas.map((categoria) => (
-                  <option key={categoria} value={categoria}>
-                    {categoria.charAt(0).toUpperCase() + categoria.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <Button type="submit">Filtrar</Button>
-          </div>
-        </CardContent>
-      </Card>
+      <IngredienteFilters searchParams={searchParams} categoriasDisponibles={categoriasUnicas} />
 
       {/* Lista de ingredientes */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
