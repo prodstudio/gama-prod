@@ -1,4 +1,4 @@
-import { createServerClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/admin" // Cambiar a cliente admin
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -7,9 +7,12 @@ import Link from "next/link"
 import { DeletePlanButton } from "@/components/forms/delete-plan-button"
 
 export default async function PlanesPage() {
-  const supabase = createServerClient()
+  // TODO: Cuando reactivemos auth, validar que user.role === 'gama_admin'
 
-  const { data: planes, error } = await supabase.from("planes").select("*").order("created_at", { ascending: false })
+  const { data: planes, error } = await supabaseAdmin
+    .from("planes")
+    .select("*")
+    .order("created_at", { ascending: false })
 
   if (error) {
     console.error("Error fetching planes:", error)

@@ -1,12 +1,12 @@
-import { createServerClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/admin" // Cambiar a cliente admin
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Building, Users, UtensilsCrossed, ClipboardList } from "lucide-react"
 
 export default async function GamaDashboard() {
-  const supabase = createServerClient()
+  // TODO: Cuando reactivemos auth, validar que user.role === 'gama_admin'
 
-  // Obtener métricas del dashboard
+  // Obtener métricas del dashboard usando cliente admin
   const [
     { count: totalEmpresas },
     { count: totalUsuarios },
@@ -15,11 +15,11 @@ export default async function GamaDashboard() {
     { data: empresasRecientes },
     { data: pedidosRecientes },
   ] = await Promise.all([
-    supabase.from("empresas").select("*", { count: "exact", head: true }),
-    supabase.from("users").select("*", { count: "exact", head: true }),
-    supabase.from("platos").select("*", { count: "exact", head: true }),
-    supabase.from("pedidos").select("*", { count: "exact", head: true }),
-    supabase
+    supabaseAdmin.from("empresas").select("*", { count: "exact", head: true }),
+    supabaseAdmin.from("users").select("*", { count: "exact", head: true }),
+    supabaseAdmin.from("platos").select("*", { count: "exact", head: true }),
+    supabaseAdmin.from("pedidos").select("*", { count: "exact", head: true }),
+    supabaseAdmin
       .from("empresas")
       .select(`
         *,
@@ -27,7 +27,7 @@ export default async function GamaDashboard() {
       `)
       .order("created_at", { ascending: false })
       .limit(5),
-    supabase
+    supabaseAdmin
       .from("pedidos")
       .select(`
         *,

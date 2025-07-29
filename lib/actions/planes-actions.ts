@@ -1,12 +1,12 @@
 "use server"
 
-import { createServerClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/admin" // Usamos el cliente admin
 import { planSchema } from "@/lib/validations/planes"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
 export async function createPlanAction(formData: FormData) {
-  const supabase = createServerClient()
+  // TODO: Cuando reactivemos auth, validar que user.role === 'gama_admin'
 
   // Convertir FormData a objeto y parsear números/booleanos
   const rawData = {
@@ -31,7 +31,8 @@ export async function createPlanAction(formData: FormData) {
     }
   }
 
-  const { data, error } = await supabase.from("planes").insert(validatedFields.data).select()
+  // Usar cliente admin para saltarse RLS temporalmente
+  const { data, error } = await supabaseAdmin.from("planes").insert(validatedFields.data).select()
 
   if (error) {
     console.error("Error creating plan:", error)
@@ -45,7 +46,7 @@ export async function createPlanAction(formData: FormData) {
 }
 
 export async function updatePlanAction(id: string, formData: FormData) {
-  const supabase = createServerClient()
+  // TODO: Cuando reactivemos auth, validar que user.role === 'gama_admin'
 
   // Convertir FormData a objeto
   const rawData = {
@@ -70,7 +71,8 @@ export async function updatePlanAction(id: string, formData: FormData) {
     }
   }
 
-  const { data, error } = await supabase.from("planes").update(validatedFields.data).eq("id", id).select()
+  // Usar cliente admin para saltarse RLS temporalmente
+  const { data, error } = await supabaseAdmin.from("planes").update(validatedFields.data).eq("id", id).select()
 
   if (error) {
     console.error("Error updating plan:", error)
@@ -84,10 +86,10 @@ export async function updatePlanAction(id: string, formData: FormData) {
 }
 
 export async function deletePlanAction(id: string) {
-  const supabase = createServerClient()
+  // TODO: Cuando reactivemos auth, validar que user.role === 'gama_admin'
 
   // Verificar si el plan está siendo usado por alguna empresa
-  const { data: empresasUsandoPlan } = await supabase.from("empresas").select("id").eq("plan_id", id).limit(1)
+  const { data: empresasUsandoPlan } = await supabaseAdmin.from("empresas").select("id").eq("plan_id", id).limit(1)
 
   if (empresasUsandoPlan && empresasUsandoPlan.length > 0) {
     return {
@@ -95,7 +97,8 @@ export async function deletePlanAction(id: string) {
     }
   }
 
-  const { error } = await supabase.from("planes").delete().eq("id", id)
+  // Usar cliente admin para saltarse RLS temporalmente
+  const { error } = await supabaseAdmin.from("planes").delete().eq("id", id)
 
   if (error) {
     console.error("Error deleting plan:", error)
@@ -109,17 +112,17 @@ export async function deletePlanAction(id: string) {
 }
 
 export async function togglePlanStatusAction(id: string) {
-  const supabase = createServerClient()
+  // TODO: Cuando reactivemos auth, validar que user.role === 'gama_admin'
 
   // Obtener el estado actual
-  const { data: currentPlan } = await supabase.from("planes").select("activo").eq("id", id).single()
+  const { data: currentPlan } = await supabaseAdmin.from("planes").select("activo").eq("id", id).single()
 
   if (!currentPlan) {
     return { error: "Plan no encontrado" }
   }
 
-  // Cambiar el estado
-  const { error } = await supabase.from("planes").update({ activo: !currentPlan.activo }).eq("id", id)
+  // Cambiar el estado usando cliente admin
+  const { error } = await supabaseAdmin.from("planes").update({ activo: !currentPlan.activo }).eq("id", id)
 
   if (error) {
     console.error("Error toggling plan status:", error)
