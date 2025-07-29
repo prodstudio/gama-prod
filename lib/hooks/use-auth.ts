@@ -3,9 +3,9 @@
 import type React from "react"
 import { useState, useEffect, createContext, useContext } from "react"
 import type { User } from "@supabase/supabase-js"
-import { createBrowserClient } from "@supabase/ssr" // Importamos el nuevo cliente de browser
+import { createBrowserClient } from "@supabase/ssr"
 import type { Database, UserProfile } from "@/lib/types/database"
-import { cookieOptions } from "@/lib/supabase/config" // Importamos nuestra configuración de cookies
+import { cookieOptions } from "@/lib/supabase/config"
 
 // Creamos una instancia del cliente Supabase para el lado del cliente (navegador)
 const supabase = createBrowserClient<Database>(
@@ -36,9 +36,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return
 
     try {
-      // Usamos el cliente de admin para obtener el perfil, saltando RLS si es necesario
-      // Esto requiere una llamada a una Server Action o API route, lo simplificaremos por ahora
-      // para que la app funcione, y luego lo haremos más seguro.
       const { data: userProfileData, error } = await supabase
         .from("users")
         .select(
@@ -52,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         `,
         )
         .eq("id", user.id)
-        .single() // Usamos single() porque esperamos un solo perfil
+        .single()
 
       if (error) {
         console.error("Error fetching profile:", error)
@@ -102,9 +99,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(null)
   }
 
-  return (
-    <AuthContext.Provider value={{ user, profile, loading, signOut, refreshProfile }}>{children}</AuthContext.Provider>
-  )
+  const value = {
+    user,
+    profile,
+    loading,
+    signOut,
+    refreshProfile,
+  }
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {
