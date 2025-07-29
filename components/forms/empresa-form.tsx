@@ -24,11 +24,18 @@ export function EmpresaForm({ empresa, planes, mode }: EmpresaFormProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
+  const [selectedPlan, setSelectedPlan] = useState(empresa?.plan_id || "none")
 
   const handleSubmit = async (formData: FormData) => {
     setIsLoading(true)
     setError("")
     setFieldErrors({})
+
+    // Si el plan seleccionado es "none", no lo enviamos
+    if (selectedPlan === "none") {
+      formData.delete("plan_id")
+      formData.append("plan_id", "")
+    }
 
     try {
       const result =
@@ -124,7 +131,7 @@ export function EmpresaForm({ empresa, planes, mode }: EmpresaFormProps) {
               {/* Plan */}
               <div className="space-y-2">
                 <Label htmlFor="plan_id">Plan Contratado</Label>
-                <Select name="plan_id" defaultValue={empresa?.plan_id || "none"} disabled={isLoading}>
+                <Select name="plan_id" value={selectedPlan} onValueChange={setSelectedPlan} disabled={isLoading}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccionar plan..." />
                   </SelectTrigger>
