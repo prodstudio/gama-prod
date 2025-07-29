@@ -8,24 +8,32 @@ import { redirect } from "next/navigation"
 export async function createEmpresaAction(formData: FormData) {
   // TODO: Cuando reactivemos auth, validar que user.role === 'gama_admin'
 
+  console.log("=== CREATE EMPRESA ACTION ===")
+  console.log("FormData entries:", Array.from(formData.entries()))
+
   const rawData = {
-    nombre: formData.get("nombre") as string,
-    email_contacto: (formData.get("email_contacto") as string) || "",
-    telefono: (formData.get("telefono") as string) || "",
-    direccion: (formData.get("direccion") as string) || "",
-    plan_id: (formData.get("plan_id") as string) || "",
+    nombre: (formData.get("nombre") as string)?.trim() || "",
+    email_contacto: (formData.get("email_contacto") as string)?.trim() || "",
+    telefono: (formData.get("telefono") as string)?.trim() || "",
+    direccion: (formData.get("direccion") as string)?.trim() || "",
+    plan_id: (formData.get("plan_id") as string)?.trim() || "",
     activa: formData.get("activa") !== "false",
   }
+
+  console.log("Raw data:", rawData)
 
   // Validar datos
   const validatedFields = empresaSchema.safeParse(rawData)
 
   if (!validatedFields.success) {
+    console.error("Validation errors:", validatedFields.error.flatten())
     return {
       error: "Datos inválidos",
       fieldErrors: validatedFields.error.flatten().fieldErrors,
     }
   }
+
+  console.log("Validated data:", validatedFields.data)
 
   // Limpiar campos vacíos - convertir strings vacíos a null
   const cleanData = {
@@ -37,14 +45,24 @@ export async function createEmpresaAction(formData: FormData) {
     activa: validatedFields.data.activa,
   }
 
+  console.log("Clean data for insert:", cleanData)
+
   const { data, error } = await supabaseAdmin.from("empresas").insert(cleanData).select()
 
   if (error) {
-    console.error("Error creating empresa:", error)
+    console.error("Supabase error creating empresa:", error)
+    console.error("Error details:", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    })
     return {
-      error: "Error al crear la empresa. Intenta nuevamente.",
+      error: `Error al crear la empresa: ${error.message}`,
     }
   }
+
+  console.log("Empresa created successfully:", data)
 
   revalidatePath("/gama/empresas")
   redirect("/gama/empresas")
@@ -54,11 +72,11 @@ export async function updateEmpresaAction(id: string, formData: FormData) {
   // TODO: Cuando reactivemos auth, validar que user.role === 'gama_admin'
 
   const rawData = {
-    nombre: formData.get("nombre") as string,
-    email_contacto: (formData.get("email_contacto") as string) || "",
-    telefono: (formData.get("telefono") as string) || "",
-    direccion: (formData.get("direccion") as string) || "",
-    plan_id: (formData.get("plan_id") as string) || "",
+    nombre: (formData.get("nombre") as string)?.trim() || "",
+    email_contacto: (formData.get("email_contacto") as string)?.trim() || "",
+    telefono: (formData.get("telefono") as string)?.trim() || "",
+    direccion: (formData.get("direccion") as string)?.trim() || "",
+    plan_id: (formData.get("plan_id") as string)?.trim() || "",
     activa: formData.get("activa") !== "false",
   }
 
@@ -85,7 +103,7 @@ export async function updateEmpresaAction(id: string, formData: FormData) {
   if (error) {
     console.error("Error updating empresa:", error)
     return {
-      error: "Error al actualizar la empresa. Intenta nuevamente.",
+      error: `Error al actualizar la empresa: ${error.message}`,
     }
   }
 
@@ -142,9 +160,9 @@ export async function createSucursalAction(empresaId: string, formData: FormData
   // TODO: Cuando reactivemos auth, validar permisos
 
   const rawData = {
-    nombre: formData.get("nombre") as string,
-    direccion: formData.get("direccion") as string,
-    telefono: (formData.get("telefono") as string) || "",
+    nombre: (formData.get("nombre") as string)?.trim() || "",
+    direccion: (formData.get("direccion") as string)?.trim() || "",
+    telefono: (formData.get("telefono") as string)?.trim() || "",
     activa: formData.get("activa") !== "false",
   }
 
@@ -182,9 +200,9 @@ export async function updateSucursalAction(id: string, formData: FormData) {
   // TODO: Cuando reactivemos auth, validar permisos
 
   const rawData = {
-    nombre: formData.get("nombre") as string,
-    direccion: formData.get("direccion") as string,
-    telefono: (formData.get("telefono") as string) || "",
+    nombre: (formData.get("nombre") as string)?.trim() || "",
+    direccion: (formData.get("direccion") as string)?.trim() || "",
+    telefono: (formData.get("telefono") as string)?.trim() || "",
     activa: formData.get("activa") !== "false",
   }
 
