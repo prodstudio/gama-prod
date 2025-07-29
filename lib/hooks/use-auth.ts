@@ -1,11 +1,18 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect, createContext, useContext } from "react"
-import type { User } from "@supabase/auth-helpers-nextjs"
-import { supabase } from "@/lib/supabase/client"
-import type { UserProfile } from "@/lib/types/database"
+import type { User } from "@supabase/supabase-js"
+import { createBrowserClient } from "@supabase/ssr" // Importamos el nuevo cliente de browser
+import type { Database, UserProfile } from "@/lib/types/database"
+import { cookieOptions } from "@/lib/supabase/config" // Importamos nuestra configuración de cookies
+
+// Creamos una instancia del cliente Supabase para el lado del cliente (navegador)
+const supabase = createBrowserClient<Database>(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  { cookieOptions },
+)
 
 interface AuthContextType {
   user: User | null
@@ -29,35 +36,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return
 
     try {
+      // Usamos el cliente de admin para obtener el perfil, saltando RLS si es necesario
+      // Esto requiere una llamada a una Server Action o API route, lo simplificaremos por ahora
+      // para que la app funcione, y luego lo haremos más seguro.
       const { data: userProfileData, error } = await supabase
         .from("users")
-        .select(`
+        .select(
+          `
           *,
           empresa:empresas(
             id,
             nombre,
             plan:planes(*)
           )
-        `)
+        `,
+        )
         .eq("id", user.id)
+        .single() // Usamos single() porque esperamos un solo perfil
 
       if (error) {
         console.error("Error fetching profile:", error)
-        // Si hay un error, cerramos sesión para evitar un estado inconsistente
         await signOut()
         return
       }
 
-      // Verificamos si se encontró un perfil. Si no, es un problema de datos.
-      if (userProfileData && userProfileData.length > 0) {
-        setProfile(userProfileData[0])
-      } else {
-        // No se encontró perfil para este usuario autenticado.
-        console.warn("ADVERTENCIA: No se encontró perfil para el usuario:", user.id, ". Cerrando sesión.")
-        setProfile(null)
-        // Cerramos la sesión para forzar al usuario a volver al login y evitar un estado roto.
-        await signOut()
-      }
+      setProfile(userProfileData)
     } catch (error) {
       console.error("Error catastrófico en refreshProfile:", error)
       await signOut()
@@ -65,39 +68,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    // Obtener sesión inicial
     const getInitialSession = async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession()
       setUser(session?.user ?? null)
+      if (session?.user) {
+        await refreshProfile()
+      }
       setLoading(false)
     }
 
     getInitialSession()
 
-    // Escuchar cambios de autenticación
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       setUser(session?.user ?? null)
-      setLoading(false)
-
       if (session?.user) {
         await refreshProfile()
       } else {
         setProfile(null)
       }
+      setLoading(false)
     })
 
     return () => subscription.unsubscribe()
   }, [])
-
-  useEffect(() => {
-    if (user && !profile) {
-      refreshProfile()
-    }
-  }, [user, profile])
 
   const signOut = async () => {
     await supabase.auth.signOut()
