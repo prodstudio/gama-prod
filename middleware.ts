@@ -1,16 +1,12 @@
-import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs"
+import { createServerClient } from "@supabase/ssr"
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
-import { supabaseAdmin } from "@/lib/supabase/admin" // Importamos el cliente de admin
 import type { Database } from "@/lib/types/database"
+import { cookieOptions } from "@/lib/supabase/config"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 
-// Rutas que requieren autenticación
 const protectedRoutes = ["/gama", "/empresa", "/empleado"]
-
-// Rutas públicas que no requieren autenticación
 const publicRoutes = ["/login", "/signup", "/forgot-password", "/test-connection"]
-
-// Mapeo de roles a rutas permitidas
 const roleRoutes = {
   gama_admin: ["/gama"],
   empresa_admin: ["/empresa"],
@@ -18,34 +14,41 @@ const roleRoutes = {
 }
 
 export async function middleware(req: NextRequest) {
-  const res = NextResponse.next()
-  const supabase = createMiddlewareClient<Database>({ req, res })
-  const { pathname } = req.nextUrl
+  const res = NextResponse.next({
+    request: { headers: req.headers },
+  })
 
-  // Intentamos obtener la sesión
+  const supabase = createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get: (name) => req.cookies.get(name)?.value,
+        set: (name, value, options) => res.cookies.set({ name, value, ...options }),
+        remove: (name, options) => res.cookies.set({ name, value: "", ...options }),
+      },
+      cookieOptions,
+    },
+  )
+
   let {
     data: { session },
   } = await supabase.auth.getSession()
 
-  // Si no hay sesión, intentamos refrescarla.
-  // Esta es una solución común para problemas de timing post-login.
   if (!session) {
     const {
       data: { session: newSession },
-      error,
     } = await supabase.auth.refreshSession()
     if (newSession) {
       session = newSession
     }
-    // Si hay un error en el refresh, lo dejamos pasar para que el siguiente bloque lo maneje
   }
 
-  // Rutas públicas siempre accesibles
+  const { pathname } = req.nextUrl
   if (publicRoutes.some((route) => pathname.startsWith(route)) || pathname === "/") {
     return res
   }
 
-  // Si no hay sesión en una ruta protegida, redirigir con error
   if (!session) {
     const redirectUrl = new URL("/login", req.url)
     redirectUrl.searchParams.set("error", "no_session")
@@ -53,7 +56,6 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
-  // Si hay sesión, verificar perfil y rol
   try {
     const { data: userProfile, error: profileError } = await supabaseAdmin
       .from("users")
@@ -64,11 +66,9 @@ export async function middleware(req: NextRequest) {
     if (profileError) {
       return NextResponse.redirect(new URL(`/login?error=profile_error&details=${profileError.message}`, req.url))
     }
-
     if (!userProfile) {
       return NextResponse.redirect(new URL("/login?error=profile_not_found", req.url))
     }
-
     if (!userProfile.activo) {
       return NextResponse.redirect(new URL("/login?error=user_inactive", req.url))
     }
@@ -77,10 +77,8 @@ export async function middleware(req: NextRequest) {
     const hasAccess = roleRoutes[userRole]?.some((route) => pathname.startsWith(route))
 
     if (hasAccess) {
-      // El usuario tiene acceso, permitir que continúe
       return res
     } else {
-      // No tiene acceso a esta ruta, redirigir a su dashboard por defecto
       const defaultRoute = getDefaultRouteForRole(userRole)
       return NextResponse.redirect(new URL(defaultRoute, req.url))
     }
@@ -104,14 +102,5 @@ function getDefaultRouteForRole(role: string): string {
 }
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
-     */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 }
