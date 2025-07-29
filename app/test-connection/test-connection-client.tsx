@@ -1,7 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase/client"
+import { createBrowserClient } from "@supabase/ssr" // Importamos el nuevo cliente
+import type { Database } from "@/lib/types/database"
+
+// Creamos una instancia del cliente para esta página de prueba
+const supabase = createBrowserClient<Database>(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+)
 
 export function TestConnectionClient() {
   const [clientStatus, setClientStatus] = useState<"loading" | "connected" | "error">("loading")
