@@ -10,136 +10,137 @@ import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { X, Plus } from "lucide-react"
-import { toast } from "sonner"
+import { X, Save, Calendar } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 import { crearMenuSemanal } from "@/lib/actions/menus-actions"
 
 interface Plato {
   id: string
   nombre: string
-  categoria: string
+  tipo: string
+  descripcion?: string
 }
 
-interface MenuPlatoData {
+interface PlatoAsignado {
   plato_id: string
-  dia_semana: number
+  nombre: string
+  tipo: string
 }
 
-interface FormData {
-  fecha_inicio: string
-  fecha_fin: string
-  activo: boolean
-  publicado: boolean
-  platos: MenuPlatoData[]
+interface PlatosPorDia {
+  [key: number]: PlatoAsignado[]
 }
 
 const DIAS_SEMANA = [
-  { value: 1, label: "Lunes" },
-  { value: 2, label: "Martes" },
-  { value: 3, label: "Miércoles" },
-  { value: 4, label: "Jueves" },
-  { value: 5, label: "Viernes" },
-  { value: 6, label: "Sábado" },
-  { value: 7, label: "Domingo" },
+  { numero: 1, nombre: "Lunes" },
+  { numero: 2, nombre: "Martes" },
+  { numero: 3, nombre: "Miércoles" },
+  { numero: 4, nombre: "Jueves" },
+  { numero: 5, nombre: "Viernes" },
+  { numero: 6, nombre: "Sábado" },
+  { numero: 7, nombre: "Domingo" },
 ]
 
 export function MenuSemanalForm() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [platos, setPlatos] = useState<Plato[]>([])
-  const [formData, setFormData] = useState<FormData>({
+  const [platosPorDia, setPlatosPorDia] = useState<PlatosPorDia>({})
+  const [formData, setFormData] = useState({
     fecha_inicio: "",
     fecha_fin: "",
     activo: true,
     publicado: false,
-    platos: [],
   })
 
   // Cargar platos disponibles
   useEffect(() => {
-    async function fetchPlatos() {
+    async function cargarPlatos() {
       try {
-        const response = await fetch("/api/platos")
-        if (response.ok) {
-          const data = await response.json()
-          setPlatos(data)
+        const { data, error } = await supabaseAdmin
+          .from("platos")
+          .select("id, nombre, tipo, descripcion")
+          .order("nombre")
+
+        if (error) {
+          console.error("Error cargando platos:", error)
+          return
         }
+
+        setPlatos(data || [])
       } catch (error) {
-        console.error("Error fetching platos:", error)
-        toast.error("Error al cargar los platos")
+        console.error("Error cargando platos:", error)
       }
     }
-    fetchPlatos()
+
+    cargarPlatos()
   }, [])
 
-  // Validación manual del formulario
-  const validateForm = (): string | null => {
-    if (!formData.fecha_inicio) return "La fecha de inicio es requerida"
-    if (!formData.fecha_fin) return "La fecha de fin es requerida"
-    if (new Date(formData.fecha_inicio) >= new Date(formData.fecha_fin)) {
-      return "La fecha de fin debe ser posterior a la fecha de inicio"
-    }
-    if (formData.platos.length === 0) return "Debe agregar al menos un plato"
-    return null
+  const agregarPlatoAlDia = (dia: number, platoId: string) => {
+    const plato = platos.find((p) => p.id === platoId)
+    if (!plato) return
+
+    setPlatosPorDia((prev) => ({
+      ...prev,
+      [dia]: [
+        ...(prev[dia] || []),
+        {
+          plato_id: plato.id,
+          nombre: plato.nombre,
+          tipo: plato.tipo,
+        },
+      ],
+    }))
+  }
+
+  const removerPlatoDelDia = (dia: number, index: number) => {
+    setPlatosPorDia((prev) => ({
+      ...prev,
+      [dia]: prev[dia]?.filter((_, i) => i !== index) || [],
+    }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    const validationError = validateForm()
-    if (validationError) {
-      toast.error(validationError)
-      return
-    }
-
     setLoading(true)
+
     try {
-      const result = await crearMenuSemanal(formData)
+      // Validar fechas
+      if (!formData.fecha_inicio || !formData.fecha_fin) {
+        alert("Por favor completa las fechas")
+        return
+      }
+
+      // Convertir platosPorDia al formato esperado
+      const platosArray = []
+      for (const [dia, platosDelDia] of Object.entries(platosPorDia)) {
+        for (const plato of platosDelDia) {
+          platosArray.push({
+            plato_id: plato.plato_id,
+            dia_semana: Number.parseInt(dia),
+          })
+        }
+      }
+
+      const menuData = {
+        ...formData,
+        platos: platosArray,
+      }
+
+      const result = await crearMenuSemanal(menuData)
+
       if (result.success) {
-        toast.success("Menú semanal creado exitosamente")
         router.push("/gama/menus")
       } else {
-        toast.error(result.error || "Error al crear el menú semanal")
+        alert(result.error || "Error al crear el menú")
       }
     } catch (error) {
       console.error("Error:", error)
-      toast.error("Error inesperado al crear el menú semanal")
+      alert("Error inesperado al crear el menú")
     } finally {
       setLoading(false)
     }
-  }
-
-  const agregarPlato = (platoId: string, diaSemana: number) => {
-    // Verificar que no exista ya este plato en este día
-    const existe = formData.platos.some((p) => p.plato_id === platoId && p.dia_semana === diaSemana)
-
-    if (existe) {
-      toast.error("Este plato ya está asignado a este día")
-      return
-    }
-
-    setFormData((prev) => ({
-      ...prev,
-      platos: [...prev.platos, { plato_id: platoId, dia_semana: diaSemana }],
-    }))
-  }
-
-  const removerPlato = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      platos: prev.platos.filter((_, i) => i !== index),
-    }))
-  }
-
-  const getPlatoNombre = (platoId: string) => {
-    const plato = platos.find((p) => p.id === platoId)
-    return plato?.nombre || "Plato no encontrado"
-  }
-
-  const getDiaNombre = (dia: number) => {
-    const diaObj = DIAS_SEMANA.find((d) => d.value === dia)
-    return diaObj?.label || "Día no válido"
   }
 
   return (
@@ -152,7 +153,7 @@ export function MenuSemanalForm() {
             id="fecha_inicio"
             type="date"
             value={formData.fecha_inicio}
-            onChange={(e) => setFormData((prev) => ({ ...prev, fecha_inicio: e.target.value }))}
+            onChange={(e) => setFormData({ ...formData, fecha_inicio: e.target.value })}
             required
           />
         </div>
@@ -162,7 +163,7 @@ export function MenuSemanalForm() {
             id="fecha_fin"
             type="date"
             value={formData.fecha_fin}
-            onChange={(e) => setFormData((prev) => ({ ...prev, fecha_fin: e.target.value }))}
+            onChange={(e) => setFormData({ ...formData, fecha_fin: e.target.value })}
             required
           />
         </div>
@@ -174,7 +175,7 @@ export function MenuSemanalForm() {
           <Switch
             id="activo"
             checked={formData.activo}
-            onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, activo: checked }))}
+            onCheckedChange={(checked) => setFormData({ ...formData, activo: checked })}
           />
           <Label htmlFor="activo">Menú Activo</Label>
         </div>
@@ -182,112 +183,88 @@ export function MenuSemanalForm() {
           <Switch
             id="publicado"
             checked={formData.publicado}
-            onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, publicado: checked }))}
+            onCheckedChange={(checked) => setFormData({ ...formData, publicado: checked })}
           />
-          <Label htmlFor="publicado">Publicado</Label>
+          <Label htmlFor="publicado">Publicar Menú</Label>
         </div>
       </div>
 
-      {/* Asignación de platos */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Asignación de Platos</CardTitle>
-          <CardDescription>Selecciona los platos para cada día de la semana</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <PlatoSelector onAgregarPlato={agregarPlato} platos={platos} />
-
-          {/* Lista de platos asignados */}
-          <div className="space-y-2">
-            <Label>Platos Asignados ({formData.platos.length})</Label>
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {formData.platos.map((menuPlato, index) => (
-                <div key={index} className="flex items-center justify-between p-2 border rounded">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{getDiaNombre(menuPlato.dia_semana)}</Badge>
-                    <span className="text-sm">{getPlatoNombre(menuPlato.plato_id)}</span>
+      {/* Asignación de platos por día */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">Asignar Platos por Día</h3>
+        <div className="grid gap-4">
+          {DIAS_SEMANA.map((dia) => (
+            <Card key={dia.numero}>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  {dia.nombre}
+                </CardTitle>
+                <CardDescription>{platosPorDia[dia.numero]?.length || 0} platos asignados</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {/* Platos asignados */}
+                {platosPorDia[dia.numero]?.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {platosPorDia[dia.numero].map((plato, index) => (
+                      <Badge key={index} variant="secondary" className="flex items-center gap-1">
+                        {plato.nombre}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-4 w-4 p-0 hover:bg-destructive hover:text-destructive-foreground"
+                          onClick={() => removerPlatoDelDia(dia.numero, index)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    ))}
                   </div>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => removerPlato(index)}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-              {formData.platos.length === 0 && <p className="text-sm text-muted-foreground">No hay platos asignados</p>}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                )}
 
-      {/* Botones */}
+                {/* Selector para agregar platos */}
+                <div className="flex gap-2">
+                  <Select onValueChange={(value) => agregarPlatoAlDia(dia.numero, value)}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Seleccionar plato..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {platos.map((plato) => (
+                        <SelectItem key={plato.id} value={plato.id}>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              {plato.tipo}
+                            </Badge>
+                            {plato.nombre}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Botones de acción */}
       <div className="flex gap-4">
         <Button type="submit" disabled={loading}>
-          {loading ? "Creando..." : "Crear Menú Semanal"}
+          {loading ? (
+            "Creando..."
+          ) : (
+            <>
+              <Save className="h-4 w-4 mr-2" />
+              Crear Menú Semanal
+            </>
+          )}
         </Button>
         <Button type="button" variant="outline" onClick={() => router.back()}>
           Cancelar
         </Button>
       </div>
     </form>
-  )
-}
-
-// Componente para seleccionar y agregar platos
-function PlatoSelector({
-  onAgregarPlato,
-  platos,
-}: {
-  onAgregarPlato: (platoId: string, diaSemana: number) => void
-  platos: Plato[]
-}) {
-  const [selectedPlato, setSelectedPlato] = useState("")
-  const [selectedDia, setSelectedDia] = useState("")
-
-  const handleAgregar = () => {
-    if (!selectedPlato || !selectedDia) {
-      toast.error("Selecciona un plato y un día")
-      return
-    }
-
-    onAgregarPlato(selectedPlato, Number.parseInt(selectedDia))
-    setSelectedPlato("")
-    setSelectedDia("")
-  }
-
-  return (
-    <div className="flex gap-2 items-end">
-      <div className="flex-1">
-        <Label>Plato</Label>
-        <Select value={selectedPlato} onValueChange={setSelectedPlato}>
-          <SelectTrigger>
-            <SelectValue placeholder="Seleccionar plato" />
-          </SelectTrigger>
-          <SelectContent>
-            {platos.map((plato) => (
-              <SelectItem key={plato.id} value={plato.id}>
-                {plato.nombre} ({plato.categoria})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="flex-1">
-        <Label>Día</Label>
-        <Select value={selectedDia} onValueChange={setSelectedDia}>
-          <SelectTrigger>
-            <SelectValue placeholder="Seleccionar día" />
-          </SelectTrigger>
-          <SelectContent>
-            {DIAS_SEMANA.map((dia) => (
-              <SelectItem key={dia.value} value={dia.value.toString()}>
-                {dia.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <Button type="button" onClick={handleAgregar}>
-        <Plus className="h-4 w-4" />
-      </Button>
-    </div>
   )
 }

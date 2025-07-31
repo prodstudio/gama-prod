@@ -1,6 +1,6 @@
 -- Limpiar datos inválidos en menu_platos antes de crear foreign keys
--- Eliminar registros con plato_id que no existen en la tabla platos
 
+-- Eliminar registros con plato_id que no existen en la tabla platos
 DELETE FROM menu_platos 
 WHERE plato_id NOT IN (SELECT id FROM platos);
 
@@ -8,9 +8,18 @@ WHERE plato_id NOT IN (SELECT id FROM platos);
 DELETE FROM menu_platos 
 WHERE menu_semanal_id NOT IN (SELECT id FROM menus_semanales);
 
--- Verificar que no queden registros inválidos
+-- Mostrar cuántos registros quedan
+SELECT COUNT(*) as registros_restantes FROM menu_platos;
+
+-- Mostrar los registros que quedan para verificar
 SELECT 
-  COUNT(*) as total_registros,
-  COUNT(CASE WHEN plato_id NOT IN (SELECT id FROM platos) THEN 1 END) as platos_invalidos,
-  COUNT(CASE WHEN menu_semanal_id NOT IN (SELECT id FROM menus_semanales) THEN 1 END) as menus_invalidos
-FROM menu_platos;
+  mp.id,
+  mp.menu_semanal_id,
+  mp.plato_id,
+  mp.dia_semana,
+  ms.fecha_inicio,
+  p.nombre as plato_nombre
+FROM menu_platos mp
+LEFT JOIN menus_semanales ms ON mp.menu_semanal_id = ms.id
+LEFT JOIN platos p ON mp.plato_id = p.id
+ORDER BY mp.created_at DESC;
