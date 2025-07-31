@@ -88,23 +88,20 @@ async function FormWithData() {
 
 export default function NuevoMenuPage() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Crear Nuevo Menú Semanal</h1>
-        <p className="text-muted-foreground">Crea un nuevo menú semanal asignando platos a cada día de la semana</p>
+    <div className="container mx-auto py-6">
+      <div className="max-w-2xl mx-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle>Crear Nuevo Menú Semanal</CardTitle>
+            <CardDescription>Crea un nuevo menú semanal y asigna platos para cada día</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Suspense fallback={<FormSkeleton />}>
+              <FormWithData />
+            </Suspense>
+          </CardContent>
+        </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Información del Menú</CardTitle>
-          <CardDescription>Configura las fechas y platos para el nuevo menú semanal</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<FormSkeleton />}>
-            <FormWithData />
-          </Suspense>
-        </CardContent>
-      </Card>
     </div>
   )
 }

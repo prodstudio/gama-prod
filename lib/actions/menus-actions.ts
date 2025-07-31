@@ -16,18 +16,6 @@ interface MenuSemanalData {
 
 export async function crearMenuSemanal(data: MenuSemanalData) {
   try {
-    // Validar datos
-    if (!data.fecha_inicio || !data.fecha_fin) {
-      return { success: false, error: "Las fechas son requeridas" }
-    }
-
-    const fechaInicio = new Date(data.fecha_inicio)
-    const fechaFin = new Date(data.fecha_fin)
-
-    if (fechaFin < fechaInicio) {
-      return { success: false, error: "La fecha de fin debe ser posterior a la fecha de inicio" }
-    }
-
     // Crear el menú semanal
     const { data: menuSemanal, error: menuError } = await supabaseAdmin
       .from("menus_semanales")
@@ -42,7 +30,7 @@ export async function crearMenuSemanal(data: MenuSemanalData) {
 
     if (menuError) {
       console.error("Error creating menu semanal:", menuError)
-      return { success: false, error: "Error al crear el menú semanal" }
+      return { success: false, error: menuError.message }
     }
 
     // Crear las relaciones con los platos
@@ -57,106 +45,86 @@ export async function crearMenuSemanal(data: MenuSemanalData) {
 
       if (platosError) {
         console.error("Error creating menu platos:", platosError)
-        // Intentar eliminar el menú semanal creado
+        // Si falla la inserción de platos, eliminar el menú creado
         await supabaseAdmin.from("menus_semanales").delete().eq("id", menuSemanal.id)
-        return { success: false, error: "Error al asignar los platos al menú" }
+
+        return { success: false, error: platosError.message }
       }
     }
 
     revalidatePath("/gama/menus")
     return { success: true, data: menuSemanal }
   } catch (error) {
-    console.error("Unexpected error:", error)
-    return { success: false, error: "Error inesperado al crear el menú semanal" }
+    console.error("Error in crearMenuSemanal:", error)
+    return { success: false, error: "Error interno del servidor" }
   }
 }
 
-export async function obtenerMenusSemanales() {
+export async function actualizarMenuSemanal(id: string, data: Partial<MenuSemanalData>) {
   try {
-    const { data, error } = await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from("menus_semanales")
-      .select(`
-        id,
-        fecha_inicio,
-        fecha_fin,
-        activo,
-        publicado,
-        created_at,
-        menu_platos (
-          id,
-          dia_semana,
-          platos (
-            id,
-            nombre,
-            tipo
-          )
-        )
-      `)
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("Error fetching menus semanales:", error)
-      return { success: false, error: "Error al obtener los menús semanales" }
-    }
-
-    return { success: true, data: data || [] }
-  } catch (error) {
-    console.error("Unexpected error:", error)
-    return { success: false, error: "Error inesperado al obtener los menús semanales" }
-  }
-}
-
-export async function obtenerMenuSemanal(id: string) {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from("menus_semanales")
-      .select(`
-        id,
-        fecha_inicio,
-        fecha_fin,
-        activo,
-        publicado,
-        created_at,
-        updated_at,
-        menu_platos (
-          id,
-          dia_semana,
-          platos (
-            id,
-            nombre,
-            tipo,
-            descripcion
-          )
-        )
-      `)
+      .update({
+        fecha_inicio: data.fecha_inicio,
+        fecha_fin: data.fecha_fin,
+        activo: data.activo,
+        publicado: data.publicado,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", id)
-      .single()
 
     if (error) {
-      console.error("Error fetching menu semanal:", error)
-      return { success: false, error: "Menú no encontrado" }
+      console.error("Error updating menu semanal:", error)
+      return { success: false, error: error.message }
     }
 
-    return { success: true, data }
-  } catch (error) {
-    console.error("Unexpected error:", error)
-    return { success: false, error: "Error inesperado al obtener el menú" }
-  }
-}
+    // Si se proporcionan platos, actualizar las relaciones
+    if (data.platos) {
+      // Eliminar relaciones existentes
+      await supabaseAdmin.from("menu_platos").delete().eq("menu_semanal_id", id)
 
-export async function eliminarMenuSemanal(id: string) {
-  try {
-    const { error } = await supabaseAdmin.from("menus_semanales").delete().eq("id", id)
+      // Crear nuevas relaciones
+      if (data.platos.length > 0) {
+        const menuPlatos = data.platos.map((plato) => ({
+          menu_semanal_id: id,
+          plato_id: plato.plato_id,
+          dia_semana: plato.dia_semana,
+        }))
 
-    if (error) {
-      console.error("Error deleting menu semanal:", error)
-      return { success: false, error: "Error al eliminar el menú" }
+        const { error: platosError } = await supabaseAdmin.from("menu_platos").insert(menuPlatos)
+
+        if (platosError) {
+          console.error("Error updating menu platos:", platosError)
+          return { success: false, error: platosError.message }
+        }
+      }
     }
 
     revalidatePath("/gama/menus")
     return { success: true }
   } catch (error) {
-    console.error("Unexpected error:", error)
-    return { success: false, error: "Error inesperado al eliminar el menú" }
+    console.error("Error in actualizarMenuSemanal:", error)
+    return { success: false, error: "Error interno del servidor" }
+  }
+}
+
+export async function eliminarMenuSemanal(id: string) {
+  try {
+    // Primero eliminar las relaciones con platos
+    await supabaseAdmin.from("menu_platos").delete().eq("menu_semanal_id", id)
+
+    // Luego eliminar el menú semanal
+    const { error } = await supabaseAdmin.from("menus_semanales").delete().eq("id", id)
+
+    if (error) {
+      console.error("Error deleting menu semanal:", error)
+      return { success: false, error: error.message }
+    }
+
+    revalidatePath("/gama/menus")
+    return { success: true }
+  } catch (error) {
+    console.error("Error in eliminarMenuSemanal:", error)
+    return { success: false, error: "Error interno del servidor" }
   }
 }
