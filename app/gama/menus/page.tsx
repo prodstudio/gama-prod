@@ -1,10 +1,8 @@
 import { Suspense } from "react"
-import { Plus, Calendar, ChefHat, Eye, Edit } from "lucide-react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
+import { Plus, Calendar, Clock } from "lucide-react"
+import Link from "next/link"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
 interface MenuSemanal {
@@ -14,112 +12,57 @@ interface MenuSemanal {
   activo: boolean
   publicado: boolean
   created_at: string
-  menu_platos: Array<{
+  menu_platos: {
     id: string
     dia_semana: number
-    platos: {
+    plato: {
       id: string
       nombre: string
-      tipo: string
+      categoria: string
     }
-  }>
+  }[]
 }
 
 async function getMenusSemanales(): Promise<MenuSemanal[]> {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from("menus_semanales")
-      .select(`
+  const { data, error } = await supabaseAdmin
+    .from("menus_semanales")
+    .select(`
+      id,
+      fecha_inicio,
+      fecha_fin,
+      activo,
+      publicado,
+      created_at,
+      menu_platos (
         id,
-        fecha_inicio,
-        fecha_fin,
-        activo,
-        publicado,
-        created_at,
-        menu_platos (
+        dia_semana,
+        plato:platos (
           id,
-          dia_semana,
-          platos (
-            id,
-            nombre,
-            tipo
-          )
+          nombre,
+          categoria
         )
-      `)
-      .order("created_at", { ascending: false })
+      )
+    `)
+    .order("created_at", { ascending: false })
 
-    if (error) {
-      console.error("Error fetching menus:", error)
-      return []
-    }
-
-    return data || []
-  } catch (error) {
-    console.error("Error fetching menus:", error)
+  if (error) {
+    console.error("Error fetching menus semanales:", error)
     return []
   }
+
+  return data || []
 }
 
-function MenusSkeletonList() {
+function MenusSemanalesContent() {
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <Card key={i}>
-          <CardHeader>
-            <Skeleton className="h-6 w-3/4" />
-            <Skeleton className="h-4 w-1/2" />
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-2/3" />
-              <div className="flex gap-2 mt-4">
-                <Skeleton className="h-8 w-16" />
-                <Skeleton className="h-8 w-20" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+    <Suspense fallback={<div>Cargando menús...</div>}>
+      <MenusSemanalesList />
+    </Suspense>
   )
-}
-
-function formatDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString("es-ES", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  })
-}
-
-function getDiaNombre(dia: number) {
-  const dias = ["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-  return dias[dia] || "Día desconocido"
 }
 
 async function MenusSemanalesList() {
   const menus = await getMenusSemanales()
-
-  if (menus.length === 0) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No hay menús semanales</h3>
-          <p className="text-muted-foreground text-center mb-4">
-            Comienza creando tu primer menú semanal para las empresas.
-          </p>
-          <Button asChild>
-            <Link href="/gama/menus/nuevo">
-              <Plus className="h-4 w-4 mr-2" />
-              Crear Primer Menú
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
-    )
-  }
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -127,63 +70,42 @@ async function MenusSemanalesList() {
         <Card key={menu.id} className="hover:shadow-md transition-shadow">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Semana del {formatDate(menu.fecha_inicio)}
-              </CardTitle>
+              <CardTitle className="text-lg">Menú Semanal</CardTitle>
               <div className="flex gap-2">
                 {menu.activo && (
-                  <Badge variant="default" className="text-xs">
-                    Activo
-                  </Badge>
+                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Activo</span>
                 )}
                 {menu.publicado && (
-                  <Badge variant="secondary" className="text-xs">
-                    Publicado
-                  </Badge>
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Publicado</span>
                 )}
               </div>
             </div>
-            <CardDescription>
-              {formatDate(menu.fecha_inicio)} - {formatDate(menu.fecha_fin)}
+            <CardDescription className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              {new Date(menu.fecha_inicio).toLocaleDateString()} - {new Date(menu.fecha_fin).toLocaleDateString()}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <ChefHat className="h-4 w-4" />
-                <span>{menu.menu_platos?.length || 0} platos programados</span>
+                <Clock className="h-4 w-4" />
+                {menu.menu_platos.length} platos programados
               </div>
-
-              {menu.menu_platos && menu.menu_platos.length > 0 && (
-                <div className="space-y-1">
-                  {menu.menu_platos.slice(0, 3).map((menuPlato) => (
-                    <div key={menuPlato.id} className="flex items-center gap-2 text-sm">
-                      <Badge variant="outline" className="text-xs">
-                        {getDiaNombre(menuPlato.dia_semana)}
-                      </Badge>
-                      <span className="truncate">{menuPlato.platos?.nombre || "Plato desconocido"}</span>
-                    </div>
-                  ))}
-                  {menu.menu_platos.length > 3 && (
-                    <p className="text-xs text-muted-foreground">+{menu.menu_platos.length - 3} platos más</p>
-                  )}
+              <div className="text-sm">
+                <strong>Platos por día:</strong>
+                <div className="mt-1 space-y-1">
+                  {[1, 2, 3, 4, 5, 6, 7].map((dia) => {
+                    const platosDelDia = menu.menu_platos.filter((mp) => mp.dia_semana === dia)
+                    const nombreDia = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"][
+                      dia - 1
+                    ]
+                    return (
+                      <div key={dia} className="text-xs">
+                        <span className="font-medium">{nombreDia}:</span> {platosDelDia.length} platos
+                      </div>
+                    )
+                  })}
                 </div>
-              )}
-
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" size="sm" asChild className="flex-1 bg-transparent">
-                  <Link href={`/gama/menus/${menu.id}`}>
-                    <Eye className="h-4 w-4 mr-1" />
-                    Ver
-                  </Link>
-                </Button>
-                <Button variant="outline" size="sm" asChild className="flex-1 bg-transparent">
-                  <Link href={`/gama/menus/${menu.id}/editar`}>
-                    <Edit className="h-4 w-4 mr-1" />
-                    Editar
-                  </Link>
-                </Button>
               </div>
             </div>
           </CardContent>
@@ -193,7 +115,7 @@ async function MenusSemanalesList() {
   )
 }
 
-export default function MenusPage() {
+export default function MenusSemanalesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -203,15 +125,13 @@ export default function MenusPage() {
         </div>
         <Button asChild>
           <Link href="/gama/menus/nuevo">
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="mr-2 h-4 w-4" />
             Nuevo Menú
           </Link>
         </Button>
       </div>
 
-      <Suspense fallback={<MenusSkeletonList />}>
-        <MenusSemanalesList />
-      </Suspense>
+      <MenusSemanalesContent />
     </div>
   )
 }

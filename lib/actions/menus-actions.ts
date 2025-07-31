@@ -8,10 +8,10 @@ interface MenuSemanalData {
   fecha_fin: string
   activo: boolean
   publicado: boolean
-  platos: Array<{
+  platos: {
     plato_id: string
     dia_semana: number
-  }>
+  }[]
 }
 
 export async function crearMenuSemanal(data: MenuSemanalData) {
@@ -33,20 +33,21 @@ export async function crearMenuSemanal(data: MenuSemanalData) {
       return { success: false, error: "Error al crear el menú semanal" }
     }
 
-    // Crear las asignaciones de platos
+    // Crear las relaciones con los platos
     if (data.platos.length > 0) {
-      const platosData = data.platos.map((plato) => ({
+      const menuPlatos = data.platos.map((plato) => ({
         menu_semanal_id: menuSemanal.id,
         plato_id: plato.plato_id,
         dia_semana: plato.dia_semana,
       }))
 
-      const { error: platosError } = await supabaseAdmin.from("menu_platos").insert(platosData)
+      const { error: platosError } = await supabaseAdmin.from("menu_platos").insert(menuPlatos)
 
       if (platosError) {
         console.error("Error creating menu platos:", platosError)
-        // Si falla la inserción de platos, eliminar el menú creado
+        // Intentar eliminar el menú semanal creado
         await supabaseAdmin.from("menus_semanales").delete().eq("id", menuSemanal.id)
+
         return { success: false, error: "Error al asignar los platos al menú" }
       }
     }
@@ -54,12 +55,12 @@ export async function crearMenuSemanal(data: MenuSemanalData) {
     revalidatePath("/gama/menus")
     return { success: true, data: menuSemanal }
   } catch (error) {
-    console.error("Error in crearMenuSemanal:", error)
-    return { success: false, error: "Error inesperado al crear el menú" }
+    console.error("Unexpected error:", error)
+    return { success: false, error: "Error inesperado al crear el menú semanal" }
   }
 }
 
-export async function getMenusSemanales() {
+export async function obtenerMenusSemanales() {
   try {
     const { data, error } = await supabaseAdmin
       .from("menus_semanales")
@@ -73,10 +74,10 @@ export async function getMenusSemanales() {
         menu_platos (
           id,
           dia_semana,
-          platos (
+          plato:platos (
             id,
             nombre,
-            tipo
+            categoria
           )
         )
       `)
@@ -84,79 +85,12 @@ export async function getMenusSemanales() {
 
     if (error) {
       console.error("Error fetching menus semanales:", error)
-      return []
+      return { success: false, error: "Error al obtener los menús semanales" }
     }
 
-    return data.map((menu) => ({
-      ...menu,
-      platos_count: menu.menu_platos?.length || 0,
-    }))
+    return { success: true, data: data || [] }
   } catch (error) {
-    console.error("Error in getMenusSemanales:", error)
-    return []
-  }
-}
-
-export async function getMenuSemanal(id: string) {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from("menus_semanales")
-      .select(`
-        id,
-        fecha_inicio,
-        fecha_fin,
-        activo,
-        publicado,
-        created_at,
-        updated_at,
-        menu_platos (
-          id,
-          dia_semana,
-          platos (
-            id,
-            nombre,
-            tipo,
-            descripcion
-          )
-        )
-      `)
-      .eq("id", id)
-      .single()
-
-    if (error) {
-      console.error("Error fetching menu semanal:", error)
-      return null
-    }
-
-    return data
-  } catch (error) {
-    console.error("Error in getMenuSemanal:", error)
-    return null
-  }
-}
-
-export async function eliminarMenuSemanal(id: string) {
-  try {
-    // Primero eliminar los platos del menú
-    const { error: platosError } = await supabaseAdmin.from("menu_platos").delete().eq("menu_semanal_id", id)
-
-    if (platosError) {
-      console.error("Error deleting menu platos:", platosError)
-      return { success: false, error: "Error al eliminar los platos del menú" }
-    }
-
-    // Luego eliminar el menú
-    const { error: menuError } = await supabaseAdmin.from("menus_semanales").delete().eq("id", id)
-
-    if (menuError) {
-      console.error("Error deleting menu semanal:", menuError)
-      return { success: false, error: "Error al eliminar el menú" }
-    }
-
-    revalidatePath("/gama/menus")
-    return { success: true }
-  } catch (error) {
-    console.error("Error in eliminarMenuSemanal:", error)
-    return { success: false, error: "Error inesperado al eliminar el menú" }
+    console.error("Unexpected error:", error)
+    return { success: false, error: "Error inesperado al obtener los menús semanales" }
   }
 }

@@ -91,8 +91,8 @@ export default function NuevoMenuPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Crear Menú Semanal</h1>
-        <p className="text-muted-foreground">Crea un nuevo menú semanal y asigna platos para cada día</p>
+        <h1 className="text-3xl font-bold tracking-tight">Nuevo Menú Semanal</h1>
+        <p className="text-muted-foreground">Crea un nuevo menú semanal asignando platos a cada día</p>
       </div>
 
       <Suspense fallback={<FormSkeleton />}>
