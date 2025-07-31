@@ -18,7 +18,7 @@
 
 ## 1. Descripción General
 
-Gama Gourmet es una plataforma integral de gestión de servicios alimentarios corporativos que conecta empresas con proveedores de alimentos especializados. La plataforma facilita la planificación, gestión y entrega de menús personalizados para comedores empresariales.
+Gama Gourmet es una plataforma integral de gestión de menús corporativos que conecta empresas con servicios de alimentación especializados. La plataforma permite a las empresas gestionar sus planes alimentarios, menús semanales y empleados, mientras que Gama Gourmet actúa como el administrador central del sistema.
 
 ---
 
@@ -26,7 +26,7 @@ Gama Gourmet es una plataforma integral de gestión de servicios alimentarios co
 
 ### 2.1 Portal de Administración de Gama (Super Admin)
 
-**Rol**: `gama_admin`  
+**Rol**: `admin_gama`  
 **Ruta base**: `/gama/*`
 
 #### Funcionalidades Principales:
@@ -57,7 +57,7 @@ Gama Gourmet es una plataforma integral de gestión de servicios alimentarios co
 
 ### 2.2 Portal de Empresa Cliente (Admin de Empresa)
 
-**Rol**: `empresa_admin`  
+**Rol**: `admin_empresa`  
 **Ruta base**: `/empresa/*`
 
 #### Funcionalidades Principales:
@@ -108,29 +108,11 @@ Gama Gourmet es una plataforma integral de gestión de servicios alimentarios co
 
 ## 3. Stack Tecnológico
 
-### 3.1 Frontend
-
-- **Framework**: Next.js 14+ (App Router)
-- **Lenguaje**: TypeScript
-- **Estilos**: Tailwind CSS
-- **Componentes**: shadcn/ui
-- **Formularios**: React Hook Form + Zod
-- **Estado**: Server Actions + Context API
-
-### 3.2 Backend y Base de Datos
-
-- **Backend**: Next.js API Routes + Server Actions
-- **Base de Datos**: Supabase (PostgreSQL)
-- **Autenticación**: Supabase Auth
-- **Tiempo Real**: Supabase Realtime
-- **Storage**: Supabase Storage (para imágenes)
-
-### 3.3 Herramientas de Desarrollo
-
-- **Validación**: Zod schemas
-- **Linting**: ESLint + Prettier
-- **Testing**: Jest + React Testing Library
-- **Deployment**: Vercel
+- **Frontend**: Next.js 14 con App Router
+- **UI**: Tailwind CSS + shadcn/ui
+- **Backend**: Supabase (PostgreSQL + Auth + RLS)
+- **Validación**: Zod + React Hook Form
+- **Estado**: React Server Components + Server Actions
 
 ---
 
@@ -187,6 +169,7 @@ Gama Gourmet es una plataforma integral de gestión de servicios alimentarios co
             │ tipo        │
             │ imagen_url  │
             │ calorias    │
+            │ tiempo_preparacion INTEGER,
             │ activo      │
             └─────────────┘
                    │
@@ -390,7 +373,7 @@ CREATE TABLE pedidos (
 
 \`\`\`typescript
 // Enums
-export type UserRole = 'gama_admin' | 'empresa_admin' | 'empleado';
+export type UserRole = 'admin_gama' | 'admin_empresa' | 'empleado';
 export type PedidoEstado = 'solicitado' | 'en_preparacion' | 'entregado' | 'cancelado';
 
 // Interfaces principales
@@ -577,7 +560,7 @@ export interface Pedido {
 
 #### Matriz de Permisos:
 
-| Recurso | Gama Admin | Empresa Admin | Empleado |
+| Recurso | Admin Gama | Admin Empresa | Empleado |
 |---------|------------|---------------|----------|
 | Planes | CRUD | Read | - |
 | Empresas | CRUD | Read (propia) | - |
@@ -763,21 +746,10 @@ gama-gourmet/
 │   ├── tables/
 │   └── shared/
 ├── lib/
-│   ├── types/
-│   │   ├── database.ts
-│   │   └── forms.ts
-│   ├── supabase/
-│   │   ├── client.ts
-│   │   └── server.ts
-│   ├── auth/
-│   │   ├── roles.ts
-│   │   └── middleware.ts
-│   ├── utils/
-│   │   ├── validations.ts
-│   │   └── formatters.ts
-│   └── hooks/
-│       ├── useAuth.ts
-│       └── useRole.ts
+│   ├── actions/        # Server Actions
+│   ├── validations/    # Esquemas Zod
+│   ├── supabase/       # Configuración Supabase
+│   └── utils.ts        # Utilidades generales
 ├── scripts/
 │   ├── 01-create-database-schema.sql
 │   └── 02-seed-data.sql
@@ -862,7 +834,7 @@ CREATE POLICY "Empleados ven solo sus pedidos" ON pedidos
     EXISTS (
       SELECT 1 FROM users 
       WHERE users.id = auth.uid() 
-      AND users.role IN ('gama_admin', 'empresa_admin')
+      AND users.role IN ('admin_gama', 'admin_empresa')
     )
   );
 \`\`\`

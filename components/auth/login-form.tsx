@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2 } from "lucide-react"
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase/client"
 
 const loginSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -23,6 +23,7 @@ export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const supabase = createClient()
 
   const {
     register,
@@ -37,8 +38,6 @@ export function LoginForm() {
     setError(null)
 
     try {
-      const supabase = createClient()
-
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
@@ -50,22 +49,31 @@ export function LoginForm() {
       }
 
       if (authData.user) {
-        // Get user role from profiles table
-        const { data: profile } = await supabase.from("profiles").select("role").eq("id", authData.user.id).single()
+        // Get user role from user metadata or profile
+        const { data: profile } = await supabase
+          .from("empleados")
+          .select("rol, empresa_id")
+          .eq("user_id", authData.user.id)
+          .single()
 
-        // Redirect based on role
-        switch (profile?.role) {
-          case "gama_admin":
-            router.push("/gama/dashboard")
-            break
-          case "empresa_admin":
-            router.push("/empresa/dashboard")
-            break
-          case "empleado":
-            router.push("/empleado/menu")
-            break
-          default:
-            router.push("/dashboard")
+        if (profile) {
+          // Redirect based on role
+          switch (profile.rol) {
+            case "gama":
+              router.push("/gama/dashboard")
+              break
+            case "empresa":
+              router.push("/empresa/dashboard")
+              break
+            case "empleado":
+              router.push("/empleado/menu")
+              break
+            default:
+              router.push("/empleado/menu")
+          }
+        } else {
+          // Default redirect if no profile found
+          router.push("/empleado/menu")
         }
       }
     } catch (err) {
