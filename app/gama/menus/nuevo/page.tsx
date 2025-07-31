@@ -1,8 +1,9 @@
 import { Suspense } from "react"
 import { MenuSemanalForm } from "@/components/forms/menu-semanal-form"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar } from "lucide-react"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import { Calendar } from "lucide-react"
 
 interface Plato {
   id: string
@@ -32,31 +33,31 @@ function FormSkeleton() {
     <div className="max-w-4xl mx-auto space-y-6">
       <Card>
         <CardHeader>
-          <div className="h-6 w-1/3" />
-          <div className="h-4 w-2/3" />
+          <Skeleton className="h-6 w-1/3" />
+          <Skeleton className="h-4 w-2/3" />
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="h-10 w-full" />
-            <div className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="h-16 w-full" />
-            <div className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
           </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <div className="h-6 w-1/4" />
-          <div className="h-4 w-1/2" />
+          <Skeleton className="h-6 w-1/4" />
+          <Skeleton className="h-4 w-1/2" />
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="h-10 w-full" />
-            <div className="h-10 w-full" />
-            <div className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
           </div>
         </CardContent>
       </Card>
@@ -88,20 +89,15 @@ async function FormWithData() {
 
 export default function NuevoMenuPage() {
   return (
-    <div className="container mx-auto py-6">
-      <div className="max-w-2xl mx-auto">
-        <Card>
-          <CardHeader>
-            <CardTitle>Crear Nuevo Menú Semanal</CardTitle>
-            <CardDescription>Crea un nuevo menú semanal y asigna platos para cada día</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Suspense fallback={<FormSkeleton />}>
-              <FormWithData />
-            </Suspense>
-          </CardContent>
-        </Card>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Crear Menú Semanal</h1>
+        <p className="text-muted-foreground">Crea un nuevo menú semanal y asigna platos para cada día</p>
       </div>
+
+      <Suspense fallback={<FormSkeleton />}>
+        <FormWithData />
+      </Suspense>
     </div>
   )
 }

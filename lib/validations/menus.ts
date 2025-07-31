@@ -1,33 +1,61 @@
-import { z } from "zod"
+// Tipos para validación manual (sin Zod para evitar conflictos)
+export interface MenuSemanalFormData {
+  fecha_inicio: string
+  fecha_fin: string
+  activo: boolean
+  publicado: boolean
+  platos: Array<{
+    plato_id: string
+    dia_semana: number
+  }>
+}
 
-export const menuSemanalSchema = z
-  .object({
-    fecha_inicio: z.string().min(1, "La fecha de inicio es requerida"),
-    fecha_fin: z.string().min(1, "La fecha de fin es requerida"),
-    activo: z.boolean().default(false),
-    publicado: z.boolean().default(false),
-  })
-  .refine(
-    (data) => {
-      const inicio = new Date(data.fecha_inicio)
-      const fin = new Date(data.fecha_fin)
-      return fin > inicio
-    },
-    {
-      message: "La fecha de fin debe ser posterior a la fecha de inicio",
-      path: ["fecha_fin"],
-    },
-  )
+export interface MenuPlatoFormData {
+  menu_id: string
+  plato_id: string
+  dia_semana: number
+}
 
-export const menuPlatoSchema = z.object({
-  plato_id: z.string().uuid("ID de plato inválido"),
-  dia_semana: z.number().min(1).max(7, "Día de semana debe estar entre 1 y 7"),
-})
+// Función de validación manual
+export function validateMenuSemanal(data: MenuSemanalFormData): string | null {
+  if (!data.fecha_inicio) return "La fecha de inicio es requerida"
+  if (!data.fecha_fin) return "La fecha de fin es requerida"
 
-export const crearMenuSemanalSchema = menuSemanalSchema.extend({
-  platos: z.array(menuPlatoSchema).min(1, "Debe asignar al menos un plato"),
-})
+  const fechaInicio = new Date(data.fecha_inicio)
+  const fechaFin = new Date(data.fecha_fin)
 
-export type MenuSemanalInput = z.infer<typeof menuSemanalSchema>
-export type MenuPlatoInput = z.infer<typeof menuPlatoSchema>
-export type CrearMenuSemanalInput = z.infer<typeof crearMenuSemanalSchema>
+  if (fechaFin < fechaInicio) {
+    return "La fecha de fin debe ser posterior o igual a la fecha de inicio"
+  }
+
+  const diffTime = Math.abs(fechaFin.getTime() - fechaInicio.getTime())
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+  if (diffDays > 6) {
+    return "El menú semanal no puede durar más de 7 días"
+  }
+
+  if (!data.platos || data.platos.length === 0) {
+    return "Debes agregar al menos un plato al menú"
+  }
+
+  // Validar platos
+  for (const plato of data.platos) {
+    if (!plato.plato_id) return "ID de plato inválido"
+    if (plato.dia_semana < 1 || plato.dia_semana > 7) {
+      return "Día de semana debe estar entre 1 y 7"
+    }
+  }
+
+  return null
+}
+
+export function validateMenuPlato(data: MenuPlatoFormData): string | null {
+  if (!data.menu_id) return "ID de menú inválido"
+  if (!data.plato_id) return "ID de plato inválido"
+  if (data.dia_semana < 1 || data.dia_semana > 7) {
+    return "Día de semana debe estar entre 1 y 7"
+  }
+
+  return null
+}
