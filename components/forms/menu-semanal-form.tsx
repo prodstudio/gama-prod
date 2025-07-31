@@ -1,20 +1,19 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, X, Save, Plus } from "lucide-react"
+import { Calendar, Plus, X, Save } from "lucide-react"
 import { toast } from "sonner"
-import { createMenuSemanalAction } from "@/lib/actions/menus-actions"
-import { menuSemanalSchema, type MenuSemanalFormData } from "@/lib/validations/menus"
+import { crearMenuSemanal } from "@/lib/actions/menus-actions"
 
 interface Plato {
   id: string
@@ -23,14 +22,14 @@ interface Plato {
   descripcion?: string
 }
 
-interface MenuSemanalFormProps {
-  platosDisponibles: Plato[]
-  initialData?: Partial<MenuSemanalFormData>
-}
-
 interface PlatoAsignado {
   plato_id: string
   dia_semana: number
+  plato?: Plato
+}
+
+interface MenuSemanalFormProps {
+  platosDisponibles: Plato[]
 }
 
 const DIAS_SEMANA = [
@@ -43,274 +42,277 @@ const DIAS_SEMANA = [
   { value: 7, label: "Domingo" },
 ]
 
-export function MenuSemanalForm({ platosDisponibles = [], initialData }: MenuSemanalFormProps) {
+export function MenuSemanalForm({ platosDisponibles }: MenuSemanalFormProps) {
   const router = useRouter()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [platosAsignados, setPlatosAsignados] = useState<PlatoAsignado[]>(initialData?.platos || [])
-  const [selectedPlato, setSelectedPlato] = useState("")
-  const [selectedDia, setSelectedDia] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
 
-  const form = useForm<MenuSemanalFormData>({
-    resolver: zodResolver(menuSemanalSchema),
-    defaultValues: {
-      fecha_inicio: initialData?.fecha_inicio || "",
-      fecha_fin: initialData?.fecha_fin || "",
-      activo: initialData?.activo ?? true,
-      publicado: initialData?.publicado ?? false,
-      platos: initialData?.platos || [],
-    },
-  })
+  // Estado del formulario
+  const [fechaInicio, setFechaInicio] = useState("")
+  const [fechaFin, setFechaFin] = useState("")
+  const [activo, setActivo] = useState(true)
+  const [publicado, setPublicado] = useState(false)
+  const [platosAsignados, setPlatosAsignados] = useState<PlatoAsignado[]>([])
+
+  // Estado para agregar platos
+  const [platoSeleccionado, setPlatoSeleccionado] = useState("")
+  const [diaSeleccionado, setDiaSeleccionado] = useState("")
 
   const agregarPlato = () => {
-    if (!selectedPlato || !selectedDia) {
+    if (!platoSeleccionado || !diaSeleccionado) {
       toast.error("Selecciona un plato y un día")
       return
     }
 
-    const platoId = selectedPlato
-    const diaSemana = Number.parseInt(selectedDia)
+    const dia = Number.parseInt(diaSeleccionado)
+    const plato = platosDisponibles.find((p) => p.id === platoSeleccionado)
 
-    // Verificar si ya existe este plato en este día
-    const existe = platosAsignados.some((p) => p.plato_id === platoId && p.dia_semana === diaSemana)
+    // Verificar si ya existe el plato en ese día
+    const yaExiste = platosAsignados.some((pa) => pa.plato_id === platoSeleccionado && pa.dia_semana === dia)
 
-    if (existe) {
+    if (yaExiste) {
       toast.error("Este plato ya está asignado a este día")
       return
     }
 
-    const nuevosPlatos = [...platosAsignados, { plato_id: platoId, dia_semana: diaSemana }]
-    setPlatosAsignados(nuevosPlatos)
-    form.setValue("platos", nuevosPlatos)
+    const nuevoPlatoAsignado: PlatoAsignado = {
+      plato_id: platoSeleccionado,
+      dia_semana: dia,
+      plato: plato,
+    }
 
-    // Limpiar selecciones
-    setSelectedPlato("")
-    setSelectedDia("")
+    setPlatosAsignados([...platosAsignados, nuevoPlatoAsignado])
+    setPlatoSeleccionado("")
+    setDiaSeleccionado("")
+    toast.success("Plato agregado al menú")
   }
 
-  const removerPlato = (index: number) => {
-    const nuevosPlatos = platosAsignados.filter((_, i) => i !== index)
-    setPlatosAsignados(nuevosPlatos)
-    form.setValue("platos", nuevosPlatos)
-  }
-
-  const getPlatoNombre = (platoId: string) => {
-    const plato = platosDisponibles.find((p) => p.id === platoId)
-    return plato?.nombre || "Plato desconocido"
+  const eliminarPlato = (platoId: string, dia: number) => {
+    setPlatosAsignados(platosAsignados.filter((pa) => !(pa.plato_id === platoId && pa.dia_semana === dia)))
+    toast.success("Plato eliminado del menú")
   }
 
   const getDiaNombre = (dia: number) => {
-    const diaObj = DIAS_SEMANA.find((d) => d.value === dia)
-    return diaObj?.label || "Día desconocido"
+    return DIAS_SEMANA.find((d) => d.value === dia)?.label || "Día desconocido"
   }
 
-  async function onSubmit(data: MenuSemanalFormData) {
-    try {
-      setIsSubmitting(true)
+  const getPlatosPorDia = (dia: number) => {
+    return platosAsignados.filter((pa) => pa.dia_semana === dia)
+  }
 
-      if (platosAsignados.length === 0) {
-        toast.error("Debes agregar al menos un plato al menú")
-        return
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!fechaInicio || !fechaFin) {
+      toast.error("Las fechas son obligatorias")
+      return
+    }
+
+    if (new Date(fechaInicio) >= new Date(fechaFin)) {
+      toast.error("La fecha de fin debe ser posterior a la fecha de inicio")
+      return
+    }
+
+    if (platosAsignados.length === 0) {
+      toast.error("Debes asignar al menos un plato al menú")
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      const menuData = {
+        fecha_inicio: fechaInicio,
+        fecha_fin: fechaFin,
+        activo,
+        publicado,
+        platos: platosAsignados.map((pa) => ({
+          plato_id: pa.plato_id,
+          dia_semana: pa.dia_semana,
+        })),
       }
 
-      const result = await createMenuSemanalAction({
-        ...data,
-        platos: platosAsignados,
-      })
+      const result = await crearMenuSemanal(menuData)
 
       if (result.success) {
         toast.success("Menú semanal creado exitosamente")
         router.push("/gama/menus")
-        router.refresh()
       } else {
-        toast.error(result.error || "Error al crear el menú semanal")
+        toast.error(result.error || "Error al crear el menú")
       }
     } catch (error) {
       console.error("Error creating menu:", error)
-      toast.error("Error inesperado al crear el menú semanal")
+      toast.error("Error inesperado al crear el menú")
     } finally {
-      setIsSubmitting(false)
+      setIsLoading(false)
     }
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          {/* Información básica */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Información del Menú
-              </CardTitle>
-              <CardDescription>Configura las fechas y estado del menú semanal</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="fecha_inicio"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fecha de Inicio</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="fecha_fin"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fecha de Fin</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="activo"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel className="text-base">Menú Activo</FormLabel>
-                        <FormDescription>El menú está disponible para las empresas</FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="publicado"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel className="text-base">Publicado</FormLabel>
-                        <FormDescription>El menú es visible para los empleados</FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Agregar platos */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Agregar Platos</CardTitle>
-              <CardDescription>Selecciona platos para cada día de la semana</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <FormLabel>Plato</FormLabel>
-                  <Select value={selectedPlato} onValueChange={setSelectedPlato}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un plato" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {platosDisponibles.map((plato) => (
-                        <SelectItem key={plato.id} value={plato.id}>
-                          {plato.nombre} ({plato.tipo})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <FormLabel>Día de la Semana</FormLabel>
-                  <Select value={selectedDia} onValueChange={setSelectedDia}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un día" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DIAS_SEMANA.map((dia) => (
-                        <SelectItem key={dia.value} value={dia.value.toString()}>
-                          {dia.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-end">
-                  <Button type="button" onClick={agregarPlato} className="w-full">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Agregar
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Platos asignados */}
-          {platosAsignados.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Platos del Menú ({platosAsignados.length})</CardTitle>
-                <CardDescription>Platos programados para esta semana</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {platosAsignados.map((plato, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Badge variant="outline">{getDiaNombre(plato.dia_semana)}</Badge>
-                        <span className="font-medium">{getPlatoNombre(plato.plato_id)}</span>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removerPlato(index)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Botones de acción */}
-          <div className="flex gap-4">
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>Guardando...</>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  Crear Menú
-                </>
-              )}
-            </Button>
-            <Button type="button" variant="outline" onClick={() => router.back()}>
-              Cancelar
-            </Button>
+    <form onSubmit={handleSubmit} className="max-w-4xl mx-auto space-y-6">
+      {/* Información básica del menú */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Información del Menú
+          </CardTitle>
+          <CardDescription>Define las fechas del menú y su configuración</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="fecha_inicio">Fecha de Inicio</Label>
+              <Input
+                id="fecha_inicio"
+                type="date"
+                value={fechaInicio}
+                onChange={(e) => setFechaInicio(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fecha_fin">Fecha de Fin</Label>
+              <Input
+                id="fecha_fin"
+                type="date"
+                value={fechaFin}
+                onChange={(e) => setFechaFin(e.target.value)}
+                required
+              />
+            </div>
           </div>
-        </form>
-      </Form>
-    </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex items-center space-x-2">
+              <Switch id="activo" checked={activo} onCheckedChange={setActivo} />
+              <Label htmlFor="activo">Menú activo</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch id="publicado" checked={publicado} onCheckedChange={setPublicado} />
+              <Label htmlFor="publicado">Publicar menú</Label>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Asignación de platos */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Asignar Platos</CardTitle>
+          <CardDescription>Selecciona los platos para cada día de la semana</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Plato</Label>
+              <Select value={platoSeleccionado} onValueChange={setPlatoSeleccionado}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un plato" />
+                </SelectTrigger>
+                <SelectContent>
+                  {platosDisponibles.map((plato) => (
+                    <SelectItem key={plato.id} value={plato.id}>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {plato.tipo}
+                        </Badge>
+                        {plato.nombre}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Día de la semana</Label>
+              <Select value={diaSeleccionado} onValueChange={setDiaSeleccionado}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un día" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DIAS_SEMANA.map((dia) => (
+                    <SelectItem key={dia.value} value={dia.value.toString()}>
+                      {dia.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-end">
+              <Button
+                type="button"
+                onClick={agregarPlato}
+                className="w-full"
+                disabled={!platoSeleccionado || !diaSeleccionado}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Agregar
+              </Button>
+            </div>
+          </div>
+
+          {/* Lista de platos asignados por día */}
+          {platosAsignados.length > 0 && (
+            <div className="space-y-4">
+              <h4 className="font-medium">Platos asignados ({platosAsignados.length})</h4>
+              <div className="grid gap-4">
+                {DIAS_SEMANA.map((dia) => {
+                  const platosDelDia = getPlatosPorDia(dia.value)
+                  if (platosDelDia.length === 0) return null
+
+                  return (
+                    <div key={dia.value} className="border rounded-lg p-4">
+                      <h5 className="font-medium mb-2">{dia.label}</h5>
+                      <div className="space-y-2">
+                        {platosDelDia.map((platoAsignado) => (
+                          <div
+                            key={`${platoAsignado.plato_id}-${platoAsignado.dia_semana}`}
+                            className="flex items-center justify-between bg-muted p-2 rounded"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs">
+                                {platoAsignado.plato?.tipo}
+                              </Badge>
+                              <span>{platoAsignado.plato?.nombre}</span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => eliminarPlato(platoAsignado.plato_id, platoAsignado.dia_semana)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Botones de acción */}
+      <div className="flex gap-4">
+        <Button type="button" variant="outline" onClick={() => router.back()} disabled={isLoading}>
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={isLoading}>
+          {isLoading ? (
+            "Creando..."
+          ) : (
+            <>
+              <Save className="h-4 w-4 mr-2" />
+              Crear Menú
+            </>
+          )}
+        </Button>
+      </div>
+    </form>
   )
 }
