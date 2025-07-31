@@ -2,16 +2,13 @@
 
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, Eye, EyeOff } from "lucide-react"
 import { loginAction } from "@/lib/actions/auth-actions"
-import { ConfigChecker } from "@/components/debug/config-checker" // Importamos el nuevo componente
+import { redirect } from "next/navigation"
+import { createClient } from "@/lib/supabase/server"
+import { LoginForm } from "@/components/auth/login-form"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
-export default function LoginPage() {
+export default async function LoginPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -20,6 +17,16 @@ export default function LoginPage() {
   const searchParams = useSearchParams()
   const urlError = searchParams.get("error")
   const errorDetails = searchParams.get("details")
+
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (user) {
+    redirect("/gama/dashboard")
+  }
 
   const getErrorMessage = (err: string | null, details: string | null) => {
     if (!err) return ""
@@ -61,62 +68,16 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gama-50 to-gama-100 flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 text-4xl">🍽️</div>
-          <CardTitle className="text-2xl font-bold">Gama Gourmet</CardTitle>
-          <CardDescription>Ingresa a tu cuenta para acceder a la plataforma</CardDescription>
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl text-center">Iniciar Sesión</CardTitle>
+          <CardDescription className="text-center">
+            Ingresa tus credenciales para acceder a Gama Gourmet
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={handleSubmit} className="space-y-4">
-            {errorMessage && (
-              <Alert variant="destructive">
-                <AlertDescription>{errorMessage}</AlertDescription>
-              </Alert>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" placeholder="tu@email.com" required disabled={isLoading} />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  required
-                  disabled={isLoading}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                  onClick={() => setShowPassword(!showPassword)}
-                  disabled={isLoading}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Iniciando sesión...
-                </>
-              ) : (
-                "Iniciar Sesión"
-              )}
-            </Button>
-          </form>
-          <ConfigChecker /> {/* Añadimos el componente aquí */}
+          <LoginForm />
         </CardContent>
       </Card>
     </div>

@@ -1,27 +1,26 @@
-import { createServerClient as createServerClientSSR } from "@supabase/ssr"
+import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
-import type { Database } from "@/lib/types/database"
-import { cookieOptions } from "./config"
 
-export const createServerClient = () => {
+export function createClient() {
   const cookieStore = cookies()
 
-  return createServerClientSSR<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-        set(name: string, value: string, options) {
-          cookieStore.set({ name, value, ...options })
-        },
-        remove(name: string, options) {
-          cookieStore.set({ name, value: "", ...options })
-        },
+  return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll()
       },
-      cookieOptions,
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
+        } catch {
+          // The `setAll` method was called from a Server Component.
+          // This can be ignored if you have middleware refreshing
+          // user sessions.
+        }
+      },
     },
-  )
+  })
 }
+
+// Backward compatibility export
+export { createClient as createServerClient }

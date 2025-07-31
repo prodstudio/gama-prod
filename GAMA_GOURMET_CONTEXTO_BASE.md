@@ -1,11 +1,11 @@
-# Gama Gourmet - Documento de Contexto Base
+# GAMA GOURMET - Sistema de Gestión de Menús Corporativos
 **Plataforma de Gestión de Viandas Empresariales**
 
 ---
 
 ## Tabla de Contenidos
 
-1. [Visión General del Proyecto](#1-visión-general-del-proyecto)
+1. [Descripción General](#1-descripción-general)
 2. [Arquitectura de Roles y Portales](#2-arquitectura-de-roles-y-portales)
 3. [Stack Tecnológico](#3-stack-tecnológico)
 4. [Modelo de Datos](#4-modelo-de-datos)
@@ -16,25 +16,9 @@
 
 ---
 
-## 1. Visión General del Proyecto
+## 1. Descripción General
 
-### 1.1 Objetivo Principal
-
-Gama Gourmet es una plataforma web integral que permite a una cocina central gestionar de manera eficiente los pedidos de viandas realizados por empleados de empresas clientes. La plataforma está diseñada para servir a tres roles principales con interfaces y funcionalidades completamente diferenciadas.
-
-### 1.2 Propuesta de Valor
-
-- **Para Gama (Cocina Central)**: Control total sobre menús, pedidos, logística y clientes
-- **Para Empresas Cliente**: Gestión simplificada de empleados y monitoreo de consumo
-- **Para Empleados**: Experiencia intuitiva para seleccionar comidas semanales
-
-### 1.3 Características Clave
-
-- **Arquitectura escalable** con separación clara de responsabilidades
-- **Control de acceso granular** basado en roles (RBAC)
-- **Gestión en tiempo real** de pedidos y estados
-- **Reportes y analytics** para optimización operativa
-- **Interfaz responsive** adaptada a cada tipo de usuario
+Gama Gourmet es una plataforma integral de gestión de servicios alimentarios corporativos que conecta empresas con proveedores de alimentos especializados. La plataforma facilita la planificación, gestión y entrega de menús personalizados para comedores empresariales.
 
 ---
 
@@ -135,8 +119,8 @@ Gama Gourmet es una plataforma web integral que permite a una cocina central ges
 
 ### 3.2 Backend y Base de Datos
 
-- **Backend**: Supabase
-- **Base de Datos**: PostgreSQL (Supabase)
+- **Backend**: Next.js API Routes + Server Actions
+- **Base de Datos**: Supabase (PostgreSQL)
 - **Autenticación**: Supabase Auth
 - **Tiempo Real**: Supabase Realtime
 - **Storage**: Supabase Storage (para imágenes)
@@ -222,6 +206,7 @@ Gama Gourmet es una plataforma web integral que permite a una cocina central ges
                     │ nombre      │
                     │ unidad_med  │
                     │ categoria   │
+                    │ alergenos   │
                     │ activo      │
                     └─────────────┘
 
@@ -231,7 +216,8 @@ Gama Gourmet es una plataforma web integral que permite a una cocina central ges
 │ id (PK)     │────│ menu_sem_id │
 │ fecha_ini   │    │ plato_id    │
 │ fecha_fin   │    │ dia_semana  │
-│ activo      │    └─────────────┘
+│ empresa_id  │    └─────────────┘
+│ activo      │
 │ publicado   │
 └─────────────┘
 \`\`\`
@@ -315,6 +301,7 @@ CREATE TABLE ingredientes (
     nombre VARCHAR(200) NOT NULL,
     unidad_de_medida VARCHAR(50) NOT NULL,
     categoria VARCHAR(100),
+    alergenos TEXT[],
     activo BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -332,6 +319,7 @@ CREATE TABLE platos (
     tipo VARCHAR(50),
     imagen_url TEXT,
     calorias INTEGER,
+    tiempo_preparacion INTEGER,
     activo BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -358,6 +346,7 @@ CREATE TABLE menus_semanales (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     fecha_inicio DATE NOT NULL,
     fecha_fin DATE NOT NULL,
+    empresa_id UUID REFERENCES empresas(id) ON DELETE CASCADE,
     activo BOOLEAN DEFAULT true,
     publicado BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -444,6 +433,7 @@ export interface Empresa {
   updated_at?: string;
   plan?: Plan;
   sucursales?: Sucursal[];
+  empleados?: UserProfile[];
 }
 
 export interface Sucursal {
@@ -463,6 +453,7 @@ export interface Ingrediente {
   nombre: string;
   unidad_de_medida: string;
   categoria?: string;
+  alergenos?: string[];
   activo: boolean;
   created_at?: string;
   updated_at?: string;
@@ -475,6 +466,7 @@ export interface Plato {
   tipo?: 'entrada' | 'principal' | 'postre' | 'bebida';
   imagen_url?: string;
   calorias?: number;
+  tiempo_preparacion?: number;
   activo: boolean;
   created_at?: string;
   updated_at?: string;
@@ -492,6 +484,7 @@ export interface MenuSemanal {
   id: string;
   fecha_inicio: string;
   fecha_fin: string;
+  empresa_id: string;
   activo: boolean;
   publicado: boolean;
   created_at?: string;
@@ -616,57 +609,51 @@ export interface Pedido {
 - [x] Configuración inicial del proyecto
 - [x] Integración con Supabase
 
-#### 🔄 Fase 1: Autenticación y Control de Acceso (EN PROGRESO)
+#### ✅ Fase 1: Autenticación y Control de Acceso (COMPLETADA)
 **Duración**: 1-2 semanas
 **Entregables**:
-- [ ] Páginas de autenticación (login, signup, forgot-password)
-- [ ] Middleware de protección de rutas
-- [ ] Server Actions para gestión de auth
-- [ ] Hooks personalizados (useAuth, useRole)
-- [ ] Redirección automática por rol
+- [x] Páginas de autenticación (login, signup, forgot-password)
+- [x] Middleware de protección de rutas
+- [x] Server Actions para gestión de auth
+- [x] Hooks personalizados (useAuth, useRole)
+- [x] Redirección automática por rol
 
-#### 📋 Fase 2: Estructura de Rutas y Layouts
+#### ✅ Fase 2: Gestión de Empresas y Planes (COMPLETADA)
 **Duración**: 1 semana
 **Entregables**:
-- [ ] Grupos de rutas con App Router
-- [ ] DashboardLayout reutilizable
-- [ ] Layouts específicos por portal
-- [ ] Componentes de navegación
-- [ ] Breadcrumbs y estructura de menús
+- [x] CRUD de Empresas
+- [x] CRUD de Planes
+- [x] Asignación de planes a empresas
 
-#### 🏢 Fase 3: Portal de Gama (Super Admin)
-**Duración**: 3-4 semanas
+#### ✅ Fase 3: Sistema de Ingredientes y Platos (COMPLETADA)
+**Duración**: 1-2 semanas
+**Entregables**:
+- [x] CRUD de Ingredientes
+- [x] CRUD de Platos
+- [x] Gestión de ingredientes en platos
+
+#### 🔄 Fase 4: Sistema de Menús Semanales (EN PROGRESO)
+**Duración**: 2 semanas
+**Entregables**:
+- [ ] CRUD de Menús Semanales
+- [ ] Asignación de platos a menús semanales
+- [ ] Publicación de menús semanales
+
+#### ⏳ Fase 5: Dashboard y Reportes (PENDIENTE)
+**Duración**: 2 semanas
 **Entregables**:
 - [ ] Dashboard principal con métricas
-- [ ] CRUD de Planes de contratación
-- [ ] CRUD de Empresas y Sucursales
-- [ ] CRUD de Ingredientes
-- [ ] CRUD de Platos con gestión de ingredientes
-- [ ] Gestión de Menús Semanales
-- [ ] Dashboard de Pedidos en tiempo real
-- [ ] Sistema de reportes básico
-
-#### 🏪 Fase 4: Portal de Empresa (Admin)
-**Duración**: 2 semanas
-**Entregables**:
-- [ ] Dashboard de empresa
-- [ ] CRUD de Empleados
-- [ ] Sistema de invitaciones
-- [ ] Dashboard de pedidos de empleados
 - [ ] Reportes de consumo y facturación
-- [ ] Configuración de empresa
+- [ ] Configuración de reportes
 
-#### 👤 Fase 5: Portal de Empleado (Comensal)
+#### ⏳ Fase 6: Funcionalidades de Empleado (PENDIENTE)
 **Duración**: 2 semanas
 **Entregables**:
-- [ ] Visualización de menú semanal
-- [ ] Sistema de pedidos día por día
-- [ ] Selección de sucursal de entrega
-- [ ] Dashboard de pedidos personales
+- [ ] Visualización de menú diario
+- [ ] Selección de opciones
 - [ ] Historial de pedidos
-- [ ] Perfil personal
 
-#### 🚀 Fase 6: Optimización y Despliegue
+#### 🚀 Fase 7: Optimización y Despliegue (PENDIENTE)
 **Duración**: 1 semana
 **Entregables**:
 - [ ] Optimización de performance
@@ -678,29 +665,36 @@ export interface Pedido {
 ### 6.3 Criterios de Aceptación por Fase
 
 #### Fase 1 - Autenticación:
-- [ ] Usuario puede registrarse y hacer login
-- [ ] Redirección automática según rol
-- [ ] Rutas protegidas funcionando
-- [ ] Logout funcional
-- [ ] Recuperación de contraseña
+- [x] Usuario puede registrarse y hacer login
+- [x] Redirección automática según rol
+- [x] Rutas protegidas funcionando
+- [x] Logout funcional
+- [x] Recuperación de contraseña
 
-#### Fase 3 - Portal Gama:
-- [ ] Gama puede crear y gestionar empresas
-- [ ] Puede crear menús semanales completos
-- [ ] Ve todos los pedidos en tiempo real
-- [ ] Puede actualizar estados de pedidos
-- [ ] Genera reportes básicos
+#### Fase 2 - Gestión de Empresas y Planes:
+- [x] Gama puede crear y gestionar empresas
+- [x] Puede crear planes de contratación
+- [x] Asignar planes a empresas
 
-#### Fase 4 - Portal Empresa:
-- [ ] Admin puede gestionar empleados
-- [ ] Ve pedidos de su empresa
-- [ ] Accede a reportes de facturación
+#### Fase 3 - Sistema de Ingredientes y Platos:
+- [x] Gama puede crear y gestionar ingredientes
+- [x] Puede crear y gestionar platos
+- [x] Asignar ingredientes a platos
 
-#### Fase 5 - Portal Empleado:
-- [ ] Empleado ve menú semanal
+#### Fase 4 - Sistema de Menús Semanales:
+- [ ] Gama puede crear y gestionar menús semanales
+- [ ] Asignar platos a menús semanales
+- [ ] Publicar menús semanales
+
+#### Fase 5 - Dashboard y Reportes:
+- [ ] Gama ve dashboard principal con métricas
+- [ ] Empresa ve dashboard con estadísticas propias
+- [ ] Gama y Empresa acceden a reportes de consumo y facturación
+
+#### Fase 6 - Funcionalidades de Empleado:
+- [ ] Empleado ve menú diario
 - [ ] Puede hacer pedidos por día
-- [ ] Selecciona sucursal de entrega
-- [ ] Ve estado de sus pedidos
+- [ ] Ve historial de pedidos
 
 ---
 
