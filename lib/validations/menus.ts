@@ -13,7 +13,6 @@ export const menuSemanalSchema = z
           dia_semana: z.number().min(1).max(7, "Día de semana debe estar entre 1 y 7"),
         }),
       )
-      .optional()
       .default([]),
   })
   .refine(
@@ -27,13 +26,18 @@ export const menuSemanalSchema = z
       path: ["fecha_fin"],
     },
   )
+  .refine(
+    (data) => {
+      const fechaInicio = new Date(data.fecha_inicio)
+      const fechaFin = new Date(data.fecha_fin)
+      const diffTime = Math.abs(fechaFin.getTime() - fechaInicio.getTime())
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+      return diffDays <= 7
+    },
+    {
+      message: "El menú no puede durar más de 7 días",
+      path: ["fecha_fin"],
+    },
+  )
 
 export type MenuSemanalFormData = z.infer<typeof menuSemanalSchema>
-
-export const menuPlatoSchema = z.object({
-  menu_semanal_id: z.string().uuid(),
-  plato_id: z.string().uuid(),
-  dia_semana: z.number().min(1).max(7),
-})
-
-export type MenuPlatoFormData = z.infer<typeof menuPlatoSchema>
