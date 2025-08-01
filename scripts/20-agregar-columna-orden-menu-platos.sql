@@ -1,42 +1,40 @@
--- Agregar columna orden a menu_platos si no existe
-DO $$ 
+-- Agregar columna 'orden' a la tabla menu_platos si no existe
+DO $$
 BEGIN
+    -- Verificar si la columna 'orden' existe
     IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns 
+        SELECT 1 
+        FROM information_schema.columns 
         WHERE table_name = 'menu_platos' 
         AND column_name = 'orden'
     ) THEN
+        -- Agregar la columna 'orden'
         ALTER TABLE menu_platos ADD COLUMN orden INTEGER DEFAULT 1;
         
         -- Actualizar registros existentes con orden secuencial por día
         UPDATE menu_platos 
-        SET orden = row_number() OVER (PARTITION BY menu_semanal_id, dia_semana ORDER BY created_at);
+        SET orden = subquery.row_num
+        FROM (
+            SELECT id, 
+                   ROW_NUMBER() OVER (PARTITION BY menu_semanal_id, dia_semana ORDER BY created_at) as row_num
+            FROM menu_platos
+        ) AS subquery
+        WHERE menu_platos.id = subquery.id;
         
-        RAISE NOTICE 'Columna orden agregada exitosamente a menu_platos';
-    ELSE
-        RAISE NOTICE 'La columna orden ya existe en menu_platos';
+        -- Hacer la columna NOT NULL después de actualizar los datos
+        ALTER TABLE menu_platos ALTER COLUMN orden SET NOT NULL;
+        
     END IF;
 END $$;
 
--- Verificar que la columna existe y mostrar estructura
-SELECT 
-    column_name, 
-    data_type, 
-    is_nullable,
-    column_default
-FROM information_schema.columns 
-WHERE table_name = 'menu_platos' 
+-- Verificar la estructura de la tabla
+SELECT column_name, data_type, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_name = 'menu_platos'
 ORDER BY ordinal_position;
 
--- Mostrar algunos registros de ejemplo si existen
-SELECT 
-    mp.id,
-    mp.menu_semanal_id,
-    mp.plato_id,
-    mp.dia_semana,
-    mp.orden,
-    p.nombre as plato_nombre
-FROM menu_platos mp
-LEFT JOIN platos p ON mp.plato_id = p.id
-ORDER BY mp.menu_semanal_id, mp.dia_semana, mp.orden
+-- Mostrar algunos registros de ejemplo
+SELECT id, menu_semanal_id, plato_id, dia_semana, orden, created_at
+FROM menu_platos
+ORDER BY menu_semanal_id, dia_semana, orden
 LIMIT 10;

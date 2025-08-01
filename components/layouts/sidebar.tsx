@@ -16,7 +16,6 @@ import {
   ChevronRight,
   Home,
   Package,
-  ClipboardList,
 } from "lucide-react"
 
 interface SidebarProps {
@@ -37,11 +36,6 @@ const navigation = [
         name: "Menús Semanales",
         href: "/gama/menus",
         icon: Calendar,
-      },
-      {
-        name: "Pedidos",
-        href: "/gama/pedidos",
-        icon: ClipboardList,
       },
     ],
   },

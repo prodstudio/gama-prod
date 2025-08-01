@@ -6,13 +6,23 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createMenuSemanalAction } from "@/lib/actions/menus-actions"
+import { ArrowLeft } from "lucide-react"
+import Link from "next/link"
 
 export default function NuevoMenuPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Crear Nuevo Menú Semanal</h1>
-        <p className="text-muted-foreground">Crea un nuevo menú semanal para tu empresa</p>
+      <div className="flex items-center gap-4">
+        <Link href="/gama/menus">
+          <Button variant="outline" size="sm">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Volver
+          </Button>
+        </Link>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Crear Nuevo Menú Semanal</h1>
+          <p className="text-muted-foreground">Crea un nuevo menú semanal para tu empresa</p>
+        </div>
       </div>
 
       <Card>
@@ -53,9 +63,11 @@ export default function NuevoMenuPage() {
 
             <div className="flex gap-4 pt-4">
               <Button type="submit">Crear Menú</Button>
-              <Button type="button" variant="outline" onClick={() => window.history.back()}>
-                Cancelar
-              </Button>
+              <Link href="/gama/menus">
+                <Button type="button" variant="outline">
+                  Cancelar
+                </Button>
+              </Link>
             </div>
           </form>
         </CardContent>
@@ -68,7 +80,7 @@ export default function NuevoMenuPage() {
         <CardContent>
           <div className="text-sm text-muted-foreground space-y-2">
             <p>1. Crea el menú con la información básica</p>
-            <p>2. Asigna platos a cada día de la semana</p>
+            <p>2. Asigna platos a cada día de la semana (próximamente)</p>
             <p>3. Publica el menú cuando esté listo</p>
           </div>
         </CardContent>
