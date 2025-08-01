@@ -3,81 +3,58 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 
 export default async function EmpleadoMenuPage() {
-  const supabase = await createClient()
+  const supabase = createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    return <div>No autorizado</div>
-  }
-
-  // Obtener el menú del día para el empleado
-  const { data: menuHoy } = await supabase
+  // Obtener menús disponibles para el empleado
+  const { data: menus } = await supabase
     .from("menus_semanales")
     .select(`
       *,
       menu_platos (
         platos (
-          id,
           nombre,
           descripcion,
           categoria,
-          precio,
-          plato_ingredientes (
-            ingredientes (
-              nombre,
-              tipo
-            )
-          )
+          precio
         )
       )
     `)
-    .eq("activo", true)
-    .single()
+    .order("fecha_inicio", { ascending: true })
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Menú del Día</h1>
-        <p className="text-muted-foreground">Selecciona tus opciones para hoy</p>
+        <h1 className="text-3xl font-bold">Menús Disponibles</h1>
+        <p className="text-muted-foreground">Selecciona tus comidas de la semana</p>
       </div>
 
-      {menuHoy ? (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {menuHoy.menu_platos?.map((menuPlato: any) => (
-            <Card key={menuPlato.platos.id} className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">{menuPlato.platos.nombre}</CardTitle>
-                  <Badge variant="secondary">{menuPlato.platos.categoria}</Badge>
-                </div>
-                <CardDescription>{menuPlato.platos.descripcion}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Ingredientes:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {menuPlato.platos.plato_ingredientes?.map((pi: any, index: number) => (
-                      <Badge key={index} variant="outline" className="text-xs">
-                        {pi.ingredientes.nombre}
-                      </Badge>
-                    ))}
-                  </div>
-                  <p className="text-lg font-bold text-primary">${menuPlato.platos.precio}</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="flex items-center justify-center h-32">
-            <p className="text-muted-foreground">No hay menú disponible para hoy</p>
-          </CardContent>
-        </Card>
-      )}
+      <div className="grid gap-6">
+        {menus?.map((menu) => (
+          <Card key={menu.id}>
+            <CardHeader>
+              <CardTitle>{menu.nombre}</CardTitle>
+              <CardDescription>
+                Semana del {new Date(menu.fecha_inicio).toLocaleDateString()} al{" "}
+                {new Date(menu.fecha_fin).toLocaleDateString()}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {menu.menu_platos?.map((menuPlato: any, index: number) => (
+                  <Card key={index} className="p-4">
+                    <h4 className="font-semibold">{menuPlato.platos.nombre}</h4>
+                    <p className="text-sm text-muted-foreground mb-2">{menuPlato.platos.descripcion}</p>
+                    <div className="flex justify-between items-center">
+                      <Badge variant="secondary">{menuPlato.platos.categoria}</Badge>
+                      <span className="font-semibold">${menuPlato.platos.precio}</span>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   )
 }

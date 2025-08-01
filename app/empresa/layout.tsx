@@ -8,7 +8,7 @@ export default async function EmpresaLayout({
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createClient()
+  const supabase = createClient()
 
   const {
     data: { user },
@@ -21,9 +21,9 @@ export default async function EmpresaLayout({
   // Verificar que el usuario tenga rol de empresa
   const { data: profile } = await supabase.from("usuarios").select("rol").eq("id", user.id).single()
 
-  if (!profile || profile.rol !== "empresa") {
-    redirect("/login")
+  if (!profile || profile.rol !== "EMPRESA") {
+    redirect("/")
   }
 
-  return <DashboardLayout userRole="empresa">{children}</DashboardLayout>
+  return <DashboardLayout userRole="EMPRESA">{children}</DashboardLayout>
 }

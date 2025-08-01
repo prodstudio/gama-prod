@@ -22,5 +22,5 @@ export function createClient() {
   })
 }
 
-// Export alias for backward compatibility
-export const createSupabaseClient = createClient
+// Export the required named export for compatibility
+export { createClient as createServerClient }

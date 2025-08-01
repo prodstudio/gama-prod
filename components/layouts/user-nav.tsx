@@ -1,59 +1,56 @@
 "use client"
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { useAuth } from "@/lib/hooks/use-auth"
-import { signOutAction } from "@/lib/actions/auth-actions"
-import Link from "next/link"
+import { LogOut, Settings, User } from "lucide-react"
 
 export function UserNav() {
-  const { profile } = useAuth()
-
-  const getInitials = (name: string, lastname: string) => {
-    return `${name.charAt(0)}${lastname.charAt(0)}`.toUpperCase()
-  }
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="secondary" size="icon" className="rounded-full">
-          <Avatar>
-            <AvatarImage src={profile?.avatar_url || ""} alt={profile?.nombre || ""} />
-            <AvatarFallback>
-              {profile?.nombre && profile?.apellido ? getInitials(profile.nombre, profile.apellido) : "GG"}
-            </AvatarFallback>
+        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+          <Avatar className="h-8 w-8">
+            <AvatarImage src="/placeholder-user.jpg" alt="Usuario" />
+            <AvatarFallback>GG</AvatarFallback>
           </Avatar>
-          <span className="sr-only">Toggle user menu</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>
+      <DropdownMenuContent className="w-56" align="end" forceMount>
+        <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{`${profile?.nombre} ${profile?.apellido}`}</p>
-            <p className="text-xs leading-none text-muted-foreground">{profile?.email}</p>
+            <p className="text-sm font-medium leading-none">Gama Admin</p>
+            <p className="text-xs leading-none text-muted-foreground">admin@gamagourmet.com</p>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/perfil">Perfil</Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/configuracion">Configuración</Link>
-        </DropdownMenuItem>
+        <DropdownMenuGroup>
+          <DropdownMenuItem>
+            <User className="mr-2 h-4 w-4" />
+            <span>Perfil</span>
+            <DropdownMenuShortcut>⇧⌘P</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem>
+            <Settings className="mr-2 h-4 w-4" />
+            <span>Configuración</span>
+            <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <form action={signOutAction}>
-          <Button type="submit" variant="ghost" className="w-full justify-start font-normal px-2">
-            Cerrar Sesión
-          </Button>
-        </form>
+        <DropdownMenuItem>
+          <LogOut className="mr-2 h-4 w-4" />
+          <span>Cerrar sesión</span>
+          <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

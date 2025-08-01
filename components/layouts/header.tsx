@@ -1,30 +1,23 @@
-import Link from "next/link"
-import { Menu, Package2, Search } from "lucide-react"
+"use client"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { UserNav } from "./user-nav"
+import { Menu, Search } from "lucide-react"
 
-export function Header() {
+interface HeaderProps {
+  onMenuClick?: () => void
+  userRole?: string
+}
+
+export function Header({ onMenuClick, userRole }: HeaderProps) {
   return (
-    <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
-      <Sheet>
-        <SheetTrigger asChild>
-          <Button variant="outline" size="icon" className="shrink-0 md:hidden bg-transparent">
-            <Menu className="h-5 w-5" />
-            <span className="sr-only">Toggle navigation menu</span>
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="flex flex-col">
-          {/* Aquí iría la navegación móvil, la implementaremos luego */}
-          <nav className="grid gap-2 text-lg font-medium">
-            <Link href="#" className="flex items-center gap-2 text-lg font-semibold">
-              <Package2 className="h-6 w-6" />
-              <span className="sr-only">Gama Gourmet</span>
-            </Link>
-          </nav>
-        </SheetContent>
-      </Sheet>
+    <header className="flex h-14 lg:h-[60px] items-center gap-4 border-b bg-gray-100/40 px-6">
+      <Button variant="outline" size="icon" className="lg:hidden bg-transparent" onClick={onMenuClick}>
+        <Menu className="h-4 w-4" />
+        <span className="sr-only">Toggle Menu</span>
+      </Button>
+
       <div className="w-full flex-1">
         <form>
           <div className="relative">
@@ -37,6 +30,7 @@ export function Header() {
           </div>
         </form>
       </div>
+
       <UserNav />
     </header>
   )

@@ -5,8 +5,8 @@
 
 ## Tabla de Contenidos
 
-1. [Descripción General](#1-descripción-general)
-2. [Arquitectura de Roles y Portales](#2-arquitectura-de-roles-y-portales)
+1. [Descripción del Proyecto](#1-descripción-del-proyecto)
+2. [Arquitectura del Sistema](#2-arquitectura-del-sistema)
 3. [Stack Tecnológico](#3-stack-tecnológico)
 4. [Modelo de Datos](#4-modelo-de-datos)
 5. [Lógica de Negocio](#5-lógica-de-negocio)
@@ -16,103 +16,164 @@
 
 ---
 
-## 1. Descripción General
+## 1. Descripción del Proyecto
 
-Gama Gourmet es una plataforma integral de gestión de menús corporativos que conecta empresas con servicios de alimentación especializados. La plataforma permite a las empresas gestionar sus planes alimentarios, menús semanales y empleados, mientras que Gama Gourmet actúa como el administrador central del sistema.
+GAMA GOURMET es una plataforma integral para la gestión de menús corporativos que permite a las empresas administrar sus servicios de alimentación de manera eficiente.
 
 ---
 
-## 2. Arquitectura de Roles y Portales
+## 2. Arquitectura del Sistema
 
-### 2.1 Portal de Administración de Gama (Super Admin)
+### Roles de Usuario
+1. **GAMA (Administrador del Sistema)**
+   - Gestión completa de empresas, planes y configuraciones
+   - Acceso a todas las funcionalidades del sistema
+   - Dashboard con métricas globales
 
-**Rol**: `admin_gama`  
-**Ruta base**: `/gama/*`
+2. **EMPRESA (Cliente Corporativo)**
+   - Gestión de sucursales y empleados
+   - Configuración de menús y preferencias
+   - Reportes de consumo
 
-#### Funcionalidades Principales:
+3. **EMPLEADO (Usuario Final)**
+   - Visualización de menús disponibles
+   - Selección de comidas
+   - Historial personal
 
-**Gestión de Catálogo:**
-- CRUD completo de ingredientes con categorización
-- CRUD de platos con asociación de ingredientes y cantidades
-- Gestión de menús semanales con asignación por días
-- Control de publicación de menús
+### Estructura de Base de Datos
 
-**Administración de Clientes:**
-- Crear y editar empresas clientes
-- Gestionar múltiples sucursales por empresa
-- Asignar y modificar planes de contratación
-- Control de estado activo/inactivo
+#### Tablas Principales
+- **usuarios**: Gestión de autenticación y roles
+- **empresas**: Información de empresas cliente
+- **sucursales**: Ubicaciones de las empresas
+- **planes**: Tipos de planes alimentarios
+- **ingredientes**: Catálogo de ingredientes
+- **platos**: Menú de platos disponibles
+- **menus_semanales**: Planificación semanal de menús
+- **menu_platos**: Relación entre menús y platos
 
-**Monitoreo Operativo:**
-- Dashboard en tiempo real de todos los pedidos
-- Filtros por empresa, sucursal, fecha y estado
-- Actualización de estados de pedidos
-- Gestión de rutas de entrega
+### Funcionalidades Principales
 
-**Reportes y Analytics:**
-- Reportes de cocina por día y plato
-- Análisis de consumo por empresa
-- Métricas de eficiencia operativa
-- Exportación de datos para facturación
+#### Para GAMA
+- Dashboard con estadísticas generales
+- CRUD completo de empresas
+- Gestión de planes alimentarios
+- Administración de ingredientes y platos
+- Creación y gestión de menús semanales
 
-### 2.2 Portal de Empresa Cliente (Admin de Empresa)
+#### Para EMPRESA
+- Dashboard con métricas de la empresa
+- Gestión de sucursales
+- Visualización de menús asignados
+- Reportes de consumo
 
-**Rol**: `admin_empresa`  
-**Ruta base**: `/empresa/*`
+#### Para EMPLEADO
+- Visualización de menús semanales
+- Selección de comidas diarias
+- Historial de selecciones
 
-#### Funcionalidades Principales:
+## Stack Tecnológico
 
-**Gestión de Personal:**
-- Alta, edición y desactivación de empleados
-- Asignación de permisos y configuraciones
-- Invitación de nuevos usuarios al sistema
-- Control de acceso por sucursal
+- **Frontend**: Next.js 15, React 19, TypeScript
+- **Backend**: Next.js API Routes, Server Actions
+- **Base de Datos**: Supabase (PostgreSQL)
+- **Autenticación**: Supabase Auth
+- **UI**: Tailwind CSS, shadcn/ui
+- **Validación**: Zod
+- **Formularios**: React Hook Form
 
-**Monitoreo de Pedidos:**
-- Vista consolidada de pedidos de todos los empleados
-- Filtros por empleado, fecha y sucursal
-- Estados de entrega en tiempo real
-- Historial completo de pedidos
+## Estructura del Proyecto
+\`\`\`
+/app
+  /(auth)          # Páginas de autenticación
+  /gama            # Dashboard y funciones de GAMA
+  /empresa         # Dashboard y funciones de EMPRESA
+  /empleado        # Dashboard y funciones de EMPLEADO
+/components        # Componentes reutilizables
+/lib              # Utilidades, acciones y configuraciones
+/scripts          # Scripts SQL para base de datos
+\`\`\`
 
-**Facturación y Consumo:**
-- Resumen mensual de consumo por empleado
-- Detalle de servicios según plan contratado
-- Proyecciones de facturación
-- Exportación de reportes contables
-
-### 2.3 Aplicación del Empleado (Comensal)
-
-**Rol**: `empleado`  
-**Ruta base**: `/empleado/*`
-
-#### Funcionalidades Principales:
-
-**Selección de Menú:**
-- Visualización clara del menú semanal actual
-- Información detallada de cada plato (ingredientes, calorías)
-- Selección día por día con validaciones
-- Elección de sucursal de entrega por pedido
-
-**Gestión de Pedidos:**
-- Confirmación y modificación de pedidos (dentro del plazo)
-- Seguimiento de estado en tiempo real
-- Notificaciones de cambios de estado
-- Historial personal de pedidos
-
-**Perfil Personal:**
-- Actualización de datos personales
-- Preferencias alimentarias y restricciones
-- Configuración de notificaciones
+## Estado Actual del Desarrollo
+El proyecto está en desarrollo activo con las funcionalidades básicas implementadas para el rol GAMA, incluyendo gestión de empresas, ingredientes, platos y la base para menús semanales.
+\`\`\`
 
 ---
 
 ## 3. Stack Tecnológico
 
-- **Frontend**: Next.js 14 con App Router
-- **UI**: Tailwind CSS + shadcn/ui
+- **Frontend**: Next.js 15 con App Router
 - **Backend**: Supabase (PostgreSQL + Auth + RLS)
+- **UI**: Tailwind CSS + shadcn/ui
 - **Validación**: Zod + React Hook Form
-- **Estado**: React Server Components + Server Actions
+- **Autenticación**: Supabase Auth con RLS
+
+### Estructura de Roles
+1. **GAMA (Super Admin)**: Control total del sistema
+2. **EMPRESA**: Gestión de su propia empresa y sucursales
+3. **EMPLEADO**: Acceso a menús asignados
+
+### Entidades Principales
+- **Empresas**: Clientes corporativos
+- **Sucursales**: Ubicaciones de las empresas
+- **Planes**: Tipos de servicio (Básico, Premium, Enterprise)
+- **Ingredientes**: Base de datos de ingredientes
+- **Platos**: Recetas y preparaciones
+- **Menús Semanales**: Planificación de comidas
+
+## Funcionalidades Core
+
+### Para GAMA
+- Dashboard con métricas generales
+- Gestión completa de empresas y planes
+- Administración de ingredientes y platos
+- Creación y asignación de menús semanales
+
+### Para EMPRESAS
+- Dashboard con información de su empresa
+- Gestión de sucursales
+- Visualización de menús asignados
+
+### Para EMPLEADOS
+- Acceso a menús de su sucursal
+- Información nutricional
+- Calendario de comidas
+
+## Base de Datos
+
+### Tablas Principales
+\`\`\`sql
+- auth.users (Supabase Auth)
+- public.empresas
+- public.sucursales
+- public.planes
+- public.ingredientes
+- public.platos
+- public.plato_ingredientes
+- public.menus_semanales
+- public.menu_platos
+\`\`\`
+
+### Políticas RLS
+Cada tabla tiene políticas específicas según el rol del usuario para garantizar la seguridad de los datos.
+
+## Flujo de Autenticación
+1. Login con email/password
+2. Verificación de rol en la base de datos
+3. Redirección según rol:
+   - GAMA → /gama/dashboard
+   - EMPRESA → /empresa/dashboard
+   - EMPLEADO → /empleado/menu
+
+## Estado Actual del Desarrollo
+- ✅ Autenticación y roles
+- ✅ Gestión de empresas y sucursales
+- ✅ Gestión de planes
+- ✅ Gestión de ingredientes
+- ✅ Gestión de platos
+- 🔄 Sistema de menús semanales (en desarrollo)
+- ⏳ Dashboard de empleados
+- ⏳ Reportes y analytics
 
 ---
 

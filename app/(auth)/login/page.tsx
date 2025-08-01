@@ -7,6 +7,8 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { LoginForm } from "@/components/auth/login-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Suspense } from "react"
+import LoginLoading from "./loading"
 
 export default async function LoginPage() {
   const router = useRouter()
@@ -69,17 +71,21 @@ export default async function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl text-center">Iniciar Sesión</CardTitle>
-          <CardDescription className="text-center">
-            Ingresa tus credenciales para acceder a Gama Gourmet
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <LoginForm />
-        </CardContent>
-      </Card>
+      <div className="w-full max-w-md">
+        <Suspense fallback={<LoginLoading />}>
+          <Card className="w-full max-w-md">
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-2xl font-bold text-center">Iniciar Sesión</CardTitle>
+              <CardDescription className="text-center">
+                Ingresa tus credenciales para acceder a GAMA Gourmet
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <LoginForm />
+            </CardContent>
+          </Card>
+        </Suspense>
+      </div>
     </div>
   )
 }

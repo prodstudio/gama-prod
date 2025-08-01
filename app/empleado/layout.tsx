@@ -8,7 +8,7 @@ export default async function EmpleadoLayout({
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createClient()
+  const supabase = createClient()
 
   const {
     data: { user },
@@ -21,9 +21,9 @@ export default async function EmpleadoLayout({
   // Verificar que el usuario tenga rol de empleado
   const { data: profile } = await supabase.from("usuarios").select("rol").eq("id", user.id).single()
 
-  if (!profile || profile.rol !== "empleado") {
-    redirect("/login")
+  if (!profile || profile.rol !== "EMPLEADO") {
+    redirect("/")
   }
 
-  return <DashboardLayout userRole="empleado">{children}</DashboardLayout>
+  return <DashboardLayout userRole="EMPLEADO">{children}</DashboardLayout>
 }

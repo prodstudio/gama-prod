@@ -2,11 +2,11 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Building2, Users, ChefHat, Calendar } from "lucide-react"
 
-export default async function GamaDashboardPage() {
-  const supabase = await createClient()
+export default async function GamaDashboard() {
+  const supabase = createClient()
 
   // Obtener estadísticas generales
-  const [{ count: totalEmpresas }, { count: totalUsuarios }, { count: totalPlatos }, { count: totalMenus }] =
+  const [{ count: empresasCount }, { count: usuariosCount }, { count: platosCount }, { count: menusCount }] =
     await Promise.all([
       supabase.from("empresas").select("*", { count: "exact", head: true }),
       supabase.from("usuarios").select("*", { count: "exact", head: true }),
@@ -17,35 +17,35 @@ export default async function GamaDashboardPage() {
   const stats = [
     {
       title: "Empresas",
-      value: totalEmpresas || 0,
-      description: "Clientes activos",
+      value: empresasCount || 0,
       icon: Building2,
+      description: "Empresas registradas",
     },
     {
       title: "Usuarios",
-      value: totalUsuarios || 0,
-      description: "Total en plataforma",
+      value: usuariosCount || 0,
       icon: Users,
+      description: "Usuarios totales",
     },
     {
       title: "Platos",
-      value: totalPlatos || 0,
-      description: "Opciones disponibles",
+      value: platosCount || 0,
       icon: ChefHat,
+      description: "Platos disponibles",
     },
     {
       title: "Menús",
-      value: totalMenus || 0,
-      description: "Menús creados",
+      value: menusCount || 0,
       icon: Calendar,
+      description: "Menús semanales",
     },
   ]
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">Vista general de la plataforma GAMA Gourmet</p>
+        <h1 className="text-3xl font-bold">Dashboard GAMA</h1>
+        <p className="text-muted-foreground">Panel de control principal del sistema</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -67,27 +67,28 @@ export default async function GamaDashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>Actividad Reciente</CardTitle>
-            <CardDescription>Últimas acciones en la plataforma</CardDescription>
+            <CardDescription>Últimas acciones en el sistema</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <p className="text-sm">• Nueva empresa registrada</p>
-              <p className="text-sm">• Menú semanal actualizado</p>
-              <p className="text-sm">• 5 nuevos platos agregados</p>
-            </div>
+            <p className="text-muted-foreground">No hay actividad reciente para mostrar.</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Próximas Tareas</CardTitle>
-            <CardDescription>Acciones pendientes</CardDescription>
+            <CardTitle>Métricas del Sistema</CardTitle>
+            <CardDescription>Rendimiento y estadísticas</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              <p className="text-sm">• Revisar menús de la próxima semana</p>
-              <p className="text-sm">• Actualizar precios de ingredientes</p>
-              <p className="text-sm">• Generar reportes mensuales</p>
+              <div className="flex justify-between">
+                <span>Empresas Activas</span>
+                <span className="font-semibold">{empresasCount || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Menús Esta Semana</span>
+                <span className="font-semibold">{menusCount || 0}</span>
+              </div>
             </div>
           </CardContent>
         </Card>
