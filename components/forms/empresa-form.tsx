@@ -4,190 +4,231 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, ArrowLeft } from "lucide-react"
-import { createEmpresaAction, updateEmpresaAction } from "@/lib/actions/empresas-actions"
-import type { Empresa, Plan } from "@/lib/types/database"
-import Link from "next/link"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Trash2, Plus } from "lucide-react"
+import { createEmpresa, updateEmpresa } from "@/lib/actions/empresas-actions"
+import { DIAS_SEMANA } from "@/lib/validations/empresas"
 
 interface EmpresaFormProps {
-  empresa?: Empresa
-  planes: Plan[]
-  mode: "create" | "edit"
+  empresa?: {
+    id: string
+    nombre: string
+    email: string
+    telefono: string
+    direccion: string
+    descuento_porcentaje?: number
+    sucursales?: Array<{
+      id: string
+      nombre: string
+      direccion: string
+      responsable_nombre?: string
+      responsable_telefono?: string
+      dias_entrega?: number[]
+    }>
+  }
+  isEditing?: boolean
 }
 
-export function EmpresaForm({ empresa, planes, mode }: EmpresaFormProps) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState("")
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
-  const [selectedPlan, setSelectedPlan] = useState(empresa?.plan_id || "none")
+interface Sucursal {
+  nombre: string
+  direccion: string
+  responsable_nombre: string
+  responsable_telefono: string
+  dias_entrega: number[]
+}
+
+export function EmpresaForm({ empresa, isEditing = false }: EmpresaFormProps) {
+  const [sucursales, setSucursales] = useState<Sucursal[]>(
+    empresa?.sucursales?.map((s) => ({
+      nombre: s.nombre,
+      direccion: s.direccion,
+      responsable_nombre: s.responsable_nombre || "",
+      responsable_telefono: s.responsable_telefono || "",
+      dias_entrega: s.dias_entrega || [1, 2, 3, 4, 5],
+    })) || [
+      {
+        nombre: "",
+        direccion: "",
+        responsable_nombre: "",
+        responsable_telefono: "",
+        dias_entrega: [1, 2, 3, 4, 5],
+      },
+    ],
+  )
+
+  const agregarSucursal = () => {
+    setSucursales([
+      ...sucursales,
+      {
+        nombre: "",
+        direccion: "",
+        responsable_nombre: "",
+        responsable_telefono: "",
+        dias_entrega: [1, 2, 3, 4, 5],
+      },
+    ])
+  }
+
+  const eliminarSucursal = (index: number) => {
+    if (sucursales.length > 1) {
+      setSucursales(sucursales.filter((_, i) => i !== index))
+    }
+  }
+
+  const actualizarSucursal = (index: number, campo: keyof Sucursal, valor: any) => {
+    const nuevasSucursales = [...sucursales]
+    nuevasSucursales[index] = { ...nuevasSucursales[index], [campo]: valor }
+    setSucursales(nuevasSucursales)
+  }
+
+  const toggleDiaEntrega = (sucursalIndex: number, dia: number) => {
+    const sucursal = sucursales[sucursalIndex]
+    const diasActuales = sucursal.dias_entrega
+    const nuevosDias = diasActuales.includes(dia)
+      ? diasActuales.filter((d) => d !== dia)
+      : [...diasActuales, dia].sort()
+
+    actualizarSucursal(sucursalIndex, "dias_entrega", nuevosDias)
+  }
 
   const handleSubmit = async (formData: FormData) => {
-    setIsLoading(true)
-    setError("")
-    setFieldErrors({})
+    // Agregar datos de sucursales al FormData
+    sucursales.forEach((sucursal, index) => {
+      formData.append(`sucursales[${index}][nombre]`, sucursal.nombre)
+      formData.append(`sucursales[${index}][direccion]`, sucursal.direccion)
+      formData.append(`sucursales[${index}][responsable_nombre]`, sucursal.responsable_nombre)
+      formData.append(`sucursales[${index}][responsable_telefono]`, sucursal.responsable_telefono)
+      formData.append(`sucursales[${index}][dias_entrega]`, JSON.stringify(sucursal.dias_entrega))
+    })
 
-    // Si el plan seleccionado es "none", no lo enviamos
-    if (selectedPlan === "none") {
-      formData.delete("plan_id")
-      formData.append("plan_id", "")
+    if (isEditing && empresa?.id) {
+      await updateEmpresa(empresa.id, formData)
+    } else {
+      await createEmpresa(formData)
     }
-
-    const result =
-      mode === "create" ? await createEmpresaAction(formData) : await updateEmpresaAction(empresa!.id, formData)
-
-    // Si result es undefined, significa que el redirect funcionó correctamente
-    if (result?.error) {
-      setError(result.error)
-      if (result.fieldErrors) {
-        setFieldErrors(result.fieldErrors)
-      }
-      setIsLoading(false)
-    }
-    // Si no hay error, el redirect ya ocurrió y no necesitamos hacer nada más
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/gama/empresas">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Volver
-          </Link>
-        </Button>
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            {mode === "create" ? "Crear Nueva Empresa" : "Editar Empresa"}
-          </h1>
-          <p className="text-gray-600">
-            {mode === "create" ? "Registra una nueva empresa cliente" : "Modifica los datos de la empresa"}
-          </p>
-        </div>
-      </div>
-
+    <form action={handleSubmit} className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Información de la Empresa</CardTitle>
-          <CardDescription>Completa los datos de la empresa cliente</CardDescription>
         </CardHeader>
-        <CardContent>
-          <form action={handleSubmit} className="space-y-6">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* Nombre */}
-              <div className="space-y-2">
-                <Label htmlFor="nombre">Nombre de la Empresa *</Label>
-                <Input
-                  id="nombre"
-                  name="nombre"
-                  placeholder="Ej: TechCorp SA"
-                  defaultValue={empresa?.nombre || ""}
-                  disabled={isLoading}
-                  required
-                />
-                {fieldErrors.nombre && <p className="text-sm text-red-600">{fieldErrors.nombre[0]}</p>}
-              </div>
-
-              {/* Email */}
-              <div className="space-y-2">
-                <Label htmlFor="email_contacto">Email de Contacto</Label>
-                <Input
-                  id="email_contacto"
-                  name="email_contacto"
-                  type="email"
-                  placeholder="contacto@empresa.com"
-                  defaultValue={empresa?.email_contacto || ""}
-                  disabled={isLoading}
-                />
-                {fieldErrors.email_contacto && <p className="text-sm text-red-600">{fieldErrors.email_contacto[0]}</p>}
-              </div>
-
-              {/* Teléfono */}
-              <div className="space-y-2">
-                <Label htmlFor="telefono">Teléfono</Label>
-                <Input
-                  id="telefono"
-                  name="telefono"
-                  placeholder="+54-11-1234-5678"
-                  defaultValue={empresa?.telefono || ""}
-                  disabled={isLoading}
-                />
-                {fieldErrors.telefono && <p className="text-sm text-red-600">{fieldErrors.telefono[0]}</p>}
-              </div>
-
-              {/* Plan */}
-              <div className="space-y-2">
-                <Label htmlFor="plan_id">Plan Contratado</Label>
-                <Select name="plan_id" value={selectedPlan} onValueChange={setSelectedPlan} disabled={isLoading}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar plan..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sin plan asignado</SelectItem>
-                    {planes.map((plan) => (
-                      <SelectItem key={plan.id} value={plan.id}>
-                        {plan.nombre} - ${plan.precio_mensual?.toLocaleString() || 0}/mes
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {fieldErrors.plan_id && <p className="text-sm text-red-600">{fieldErrors.plan_id[0]}</p>}
-              </div>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="nombre">Nombre de la empresa</Label>
+              <Input id="nombre" name="nombre" defaultValue={empresa?.nombre} required />
             </div>
-
-            {/* Dirección */}
-            <div className="space-y-2">
-              <Label htmlFor="direccion">Dirección</Label>
-              <Textarea
-                id="direccion"
-                name="direccion"
-                placeholder="Dirección completa de la empresa..."
-                rows={3}
-                defaultValue={empresa?.direccion || ""}
-                disabled={isLoading}
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" name="email" type="email" defaultValue={empresa?.email} required />
+            </div>
+            <div>
+              <Label htmlFor="telefono">Teléfono</Label>
+              <Input id="telefono" name="telefono" defaultValue={empresa?.telefono} required />
+            </div>
+            <div>
+              <Label htmlFor="descuento_porcentaje">Descuento (%)</Label>
+              <Input
+                id="descuento_porcentaje"
+                name="descuento_porcentaje"
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                defaultValue={empresa?.descuento_porcentaje || 0}
               />
-              {fieldErrors.direccion && <p className="text-sm text-red-600">{fieldErrors.direccion[0]}</p>}
             </div>
-
-            {/* Estado activo */}
-            <div className="flex items-center space-x-2">
-              <Switch id="activa" name="activa" defaultChecked={empresa?.activa ?? true} disabled={isLoading} />
-              <Label htmlFor="activa" className="font-normal">
-                Empresa activa (puede realizar pedidos)
-              </Label>
-            </div>
-
-            {/* Botones */}
-            <div className="flex gap-4 pt-6">
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {mode === "create" ? "Creando..." : "Guardando..."}
-                  </>
-                ) : mode === "create" ? (
-                  "Crear Empresa"
-                ) : (
-                  "Guardar Cambios"
-                )}
-              </Button>
-              <Button type="button" variant="outline" asChild disabled={isLoading}>
-                <Link href="/gama/empresas">Cancelar</Link>
-              </Button>
-            </div>
-          </form>
+          </div>
+          <div>
+            <Label htmlFor="direccion">Dirección</Label>
+            <Input id="direccion" name="direccion" defaultValue={empresa?.direccion} required />
+          </div>
         </CardContent>
       </Card>
-    </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Sucursales</CardTitle>
+          <Button type="button" onClick={agregarSucursal} size="sm">
+            <Plus className="h-4 w-4 mr-2" />
+            Agregar Sucursal
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {sucursales.map((sucursal, index) => (
+            <Card key={index} className="p-4">
+              <div className="flex justify-between items-start mb-4">
+                <h4 className="font-medium">Sucursal {index + 1}</h4>
+                {sucursales.length > 1 && (
+                  <Button type="button" variant="outline" size="sm" onClick={() => eliminarSucursal(index)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <Label>Nombre de la sucursal</Label>
+                  <Input
+                    value={sucursal.nombre}
+                    onChange={(e) => actualizarSucursal(index, "nombre", e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label>Dirección</Label>
+                  <Input
+                    value={sucursal.direccion}
+                    onChange={(e) => actualizarSucursal(index, "direccion", e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label>Responsable</Label>
+                  <Input
+                    value={sucursal.responsable_nombre}
+                    onChange={(e) => actualizarSucursal(index, "responsable_nombre", e.target.value)}
+                    placeholder="Nombre del responsable"
+                  />
+                </div>
+                <div>
+                  <Label>Teléfono del responsable</Label>
+                  <Input
+                    value={sucursal.responsable_telefono}
+                    onChange={(e) => actualizarSucursal(index, "responsable_telefono", e.target.value)}
+                    placeholder="Teléfono del responsable"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Días de entrega</Label>
+                <div className="flex flex-wrap gap-2">
+                  {DIAS_SEMANA.map((dia) => (
+                    <div key={dia.value} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`sucursal-${index}-dia-${dia.value}`}
+                        checked={sucursal.dias_entrega.includes(dia.value)}
+                        onCheckedChange={() => toggleDiaEntrega(index, dia.value)}
+                      />
+                      <Label htmlFor={`sucursal-${index}-dia-${dia.value}`} className="text-sm font-normal">
+                        {dia.label}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          ))}
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-end space-x-2">
+        <Button type="submit">{isEditing ? "Actualizar Empresa" : "Crear Empresa"}</Button>
+      </div>
+    </form>
   )
 }
