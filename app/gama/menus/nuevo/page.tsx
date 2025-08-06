@@ -1,6 +1,6 @@
 "use client"
 
-import { MenuSemanalDragDropForm } from "@/components/forms/menu-semanal-drag-drop-form"
+import { MenuSemanalForm } from "@/components/forms/menu-semanal-form"
 import { ArrowLeft } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -23,7 +23,7 @@ export default function NuevoMenuPage() {
         </div>
       </div>
 
-      <MenuSemanalDragDropForm />
+      <MenuSemanalForm />
     </div>
   )
 }

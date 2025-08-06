@@ -1,18 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, X, Save, Plus } from "lucide-react"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Search, Plus, X, Calendar, Save, Send, ChefHat, Eye } from 'lucide-react'
 import { toast } from "sonner"
-import { createMenuSemanalAction } from "@/lib/actions/menus-actions"
+import { createMenuSemanal, updateMenuSemanal } from "@/lib/actions/menus-actions"
+import { createClient } from "@/lib/supabase/client"
 
 interface Plato {
   id: string
@@ -21,158 +21,355 @@ interface Plato {
   descripcion?: string
 }
 
-interface MenuSemanalFormProps {
-  platosDisponibles: Plato[]
-  initialData?: {
-    fecha_inicio?: string
-    fecha_fin?: string
-    activo?: boolean
-    publicado?: boolean
-    platos?: Array<{ plato_id: string; dia_semana: number }>
-  }
-}
-
-interface PlatoAsignado {
-  plato_id: string
+interface MenuPlato {
   dia_semana: number
+  orden: number
+  platos: Plato
 }
 
-interface FormData {
+interface Menu {
+  id: string
+  nombre: string
   fecha_inicio: string
   fecha_fin: string
-  activo: boolean
   publicado: boolean
-  platos: PlatoAsignado[]
+  menu_platos?: MenuPlato[]
+}
+
+interface MenuSemanalFormProps {
+  menu?: Menu
+  platosDisponibles?: Plato[]
+  isEditing?: boolean
+}
+
+interface MenuPlatos {
+  lunes: {
+    principales: Plato[]
+    entradas: Plato[]
+    postres: Plato[]
+  }
+  martes: {
+    principales: Plato[]
+    entradas: Plato[]
+    postres: Plato[]
+  }
+  miercoles: {
+    principales: Plato[]
+    entradas: Plato[]
+    postres: Plato[]
+  }
+  jueves: {
+    principales: Plato[]
+    entradas: Plato[]
+    postres: Plato[]
+  }
+  viernes: {
+    principales: Plato[]
+    entradas: Plato[]
+    postres: Plato[]
+  }
 }
 
 const DIAS_SEMANA = [
-  { value: 1, label: "Lunes" },
-  { value: 2, label: "Martes" },
-  { value: 3, label: "Miércoles" },
-  { value: 4, label: "Jueves" },
-  { value: 5, label: "Viernes" },
-  { value: 6, label: "Sábado" },
-  { value: 7, label: "Domingo" },
+  { key: "lunes", label: "Lunes", id: 1 },
+  { key: "martes", label: "Martes", id: 2 },
+  { key: "miercoles", label: "Miércoles", id: 3 },
+  { key: "jueves", label: "Jueves", id: 4 },
+  { key: "viernes", label: "Viernes", id: 5 },
 ]
 
-export function MenuSemanalForm({ platosDisponibles = [], initialData }: MenuSemanalFormProps) {
-  const router = useRouter()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [platosAsignados, setPlatosAsignados] = useState<PlatoAsignado[]>(initialData?.platos || [])
-  const [selectedPlato, setSelectedPlato] = useState("")
-  const [selectedDia, setSelectedDia] = useState("")
+const CATEGORIAS = [
+  { key: "principales", label: "Principales", max: 5, color: "bg-blue-100 text-blue-800" },
+  { key: "entradas", label: "Entradas", max: 2, color: "bg-green-100 text-green-800" },
+  { key: "postres", label: "Postres", max: 4, color: "bg-purple-100 text-purple-800" },
+]
 
-  const form = useForm<FormData>({
-    defaultValues: {
-      fecha_inicio: initialData?.fecha_inicio || "",
-      fecha_fin: initialData?.fecha_fin || "",
-      activo: initialData?.activo ?? true,
-      publicado: initialData?.publicado ?? false,
-      platos: initialData?.platos || [],
-    },
+const TIPO_TO_CATEGORIA = {
+  plato_principal: "principales",
+  entrada: "entradas", 
+  postre: "postres",
+  ensalada: "entradas",
+  sopa: "entradas",
+}
+
+export function MenuSemanalForm({ menu, platosDisponibles: platosDisponiblesProp, isEditing = false }: MenuSemanalFormProps) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [nombre, setNombre] = useState(menu?.nombre || "")
+  const [fechaInicio, setFechaInicio] = useState(menu?.fecha_inicio || "")
+  const [fechaFin, setFechaFin] = useState(menu?.fecha_fin || "")
+  const [platosDisponibles, setPlatosDisponibles] = useState<Plato[]>(platosDisponiblesProp || [])
+  const [platosFiltrados, setPlatosFiltrados] = useState<Plato[]>([])
+  const [searchTerm, setSearchTerm] = useState("")
+  const [filtroCategoria, setFiltroCategoria] = useState<string>("todos")
+  const [loadingPlatos, setLoadingPlatos] = useState(!platosDisponiblesProp)
+
+  // Estado del menú semanal - inicializar con datos existentes si es edición
+  const [menuPlatos, setMenuPlatos] = useState<MenuPlatos>(() => {
+    const inicial: MenuPlatos = {
+      lunes: { principales: [], entradas: [], postres: [] },
+      martes: { principales: [], entradas: [], postres: [] },
+      miercoles: { principales: [], entradas: [], postres: [] },
+      jueves: { principales: [], entradas: [], postres: [] },
+      viernes: { principales: [], entradas: [], postres: [] },
+    }
+    
+    // Llenar con datos existentes si es edición
+    if (isEditing && menu?.menu_platos) {
+      menu.menu_platos.forEach(menuPlato => {
+        const diaKey = DIAS_SEMANA.find(d => d.id === menuPlato.dia_semana)?.key
+        const categoria = TIPO_TO_CATEGORIA[menuPlato.platos.tipo as keyof typeof TIPO_TO_CATEGORIA] || "principales"
+        
+        if (diaKey && inicial[diaKey as keyof MenuPlatos]) {
+          const categoriaKey = categoria as keyof MenuPlatos["lunes"]
+          inicial[diaKey as keyof MenuPlatos][categoriaKey].push(menuPlato.platos)
+        }
+      })
+    }
+    
+    return inicial
   })
 
-  const validateForm = (data: FormData): string | null => {
-    if (!data.fecha_inicio) return "La fecha de inicio es requerida"
-    if (!data.fecha_fin) return "La fecha de fin es requerida"
+  // Cargar platos disponibles si no se proporcionaron
+  useEffect(() => {
+    if (!platosDisponiblesProp) {
+      async function loadPlatos() {
+        try {
+          const supabase = createClient()
+          const { data, error } = await supabase
+            .from("platos")
+            .select("id, nombre, tipo, descripcion")
+            .neq("tipo", "bebida")
+            .eq("activo", true)
+            .order("tipo")
+            .order("nombre")
 
-    const fechaInicio = new Date(data.fecha_inicio)
-    const fechaFin = new Date(data.fecha_fin)
+          if (error) {
+            console.error("Error loading platos:", error)
+            toast.error("Error al cargar los platos")
+            return
+          }
 
-    if (fechaFin < fechaInicio) {
-      return "La fecha de fin debe ser posterior o igual a la fecha de inicio"
+          setPlatosDisponibles(data || [])
+        } catch (error) {
+          console.error("Error:", error)
+          toast.error("Error al cargar los platos")
+        } finally {
+          setLoadingPlatos(false)
+        }
+      }
+
+      loadPlatos()
+    }
+  }, [platosDisponiblesProp])
+
+  // Filtrar platos por búsqueda y categoría
+  useEffect(() => {
+    let filtered = platosDisponibles
+
+    // Filtrar por búsqueda
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (plato) =>
+          plato.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          plato.tipo.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
     }
 
-    const diffTime = Math.abs(fechaFin.getTime() - fechaInicio.getTime())
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-
-    if (diffDays > 6) {
-      return "El menú semanal no puede durar más de 7 días"
+    // Filtrar por categoría
+    if (filtroCategoria !== "todos") {
+      const tiposPermitidos = Object.keys(TIPO_TO_CATEGORIA).filter(
+        (tipo) => TIPO_TO_CATEGORIA[tipo as keyof typeof TIPO_TO_CATEGORIA] === filtroCategoria,
+      )
+      filtered = filtered.filter((plato) => tiposPermitidos.includes(plato.tipo))
     }
 
-    if (platosAsignados.length === 0) {
-      return "Debes agregar al menos un plato al menú"
+    setPlatosFiltrados(filtered)
+  }, [searchTerm, filtroCategoria, platosDisponibles])
+
+  // Generar nombre automático basado en fechas
+  useEffect(() => {
+    if (fechaInicio && fechaFin && !isEditing) {
+      const inicio = new Date(fechaInicio)
+      const fin = new Date(fechaFin)
+      const formatDate = (date: Date) => {
+        const day = date.getDate().toString().padStart(2, "0")
+        const month = (date.getMonth() + 1).toString().padStart(2, "0")
+        return `${day}/${month}`
+      }
+      setNombre(`Menú Semanal (${formatDate(inicio)} - ${formatDate(fin)})`)
     }
+  }, [fechaInicio, fechaFin, isEditing])
 
-    return null
-  }
+  // Calcular fechas de semana automáticamente
+  useEffect(() => {
+    if (fechaInicio && !fechaFin) {
+      const inicio = new Date(fechaInicio)
+      const fin = new Date(inicio)
+      fin.setDate(inicio.getDate() + 4) // Lunes a Viernes = 5 días
+      setFechaFin(fin.toISOString().split("T")[0])
+    }
+  }, [fechaInicio, fechaFin])
 
-  const agregarPlato = () => {
-    if (!selectedPlato || !selectedDia) {
-      toast.error("Selecciona un plato y un día")
+  const agregarPlato = (plato: Plato, dia: string, categoria: string) => {
+    const categoriaConfig = CATEGORIAS.find((c) => c.key === categoria)
+    const diaKey = dia as keyof MenuPlatos
+    const categoriaKey = categoria as keyof MenuPlatos["lunes"]
+
+    // Verificar límite
+    if (menuPlatos[diaKey][categoriaKey].length >= (categoriaConfig?.max || 0)) {
+      toast.error(`Máximo ${categoriaConfig?.max} ${categoriaConfig?.label.toLowerCase()} por día`)
       return
     }
 
-    const platoId = selectedPlato
-    const diaSemana = Number.parseInt(selectedDia)
-
-    // Verificar si ya existe este plato en este día
-    const existe = platosAsignados.some((p) => p.plato_id === platoId && p.dia_semana === diaSemana)
-
-    if (existe) {
-      toast.error("Este plato ya está asignado a este día")
+    // Verificar duplicado
+    if (menuPlatos[diaKey][categoriaKey].some((p) => p.id === plato.id)) {
+      toast.error("Este plato ya está agregado a esta categoría")
       return
     }
 
-    const nuevosPlatos = [...platosAsignados, { plato_id: platoId, dia_semana: diaSemana }]
-    setPlatosAsignados(nuevosPlatos)
-    form.setValue("platos", nuevosPlatos)
-
-    // Limpiar selecciones
-    setSelectedPlato("")
-    setSelectedDia("")
+    setMenuPlatos((prev) => ({
+      ...prev,
+      [dia]: {
+        ...prev[dia],
+        [categoria]: [...prev[dia][categoriaKey], plato],
+      },
+    }))
+    toast.success("Plato agregado exitosamente")
   }
 
-  const removerPlato = (index: number) => {
-    const nuevosPlatos = platosAsignados.filter((_, i) => i !== index)
-    setPlatosAsignados(nuevosPlatos)
-    form.setValue("platos", nuevosPlatos)
+  const quitarPlato = (platoId: string, dia: string, categoria: string) => {
+    const diaKey = dia as keyof MenuPlatos
+    const categoriaKey = categoria as keyof MenuPlatos["lunes"]
+
+    setMenuPlatos((prev) => ({
+      ...prev,
+      [dia]: {
+        ...prev[dia],
+        [categoria]: prev[dia][categoriaKey].filter((p) => p.id !== platoId),
+      },
+    }))
+    toast.success("Plato eliminado")
   }
 
-  const getPlatoNombre = (platoId: string) => {
-    const plato = platosDisponibles.find((p) => p.id === platoId)
-    return plato?.nombre || "Plato desconocido"
-  }
-
-  const getDiaNombre = (dia: number) => {
-    const diaObj = DIAS_SEMANA.find((d) => d.value === dia)
-    return diaObj?.label || "Día desconocido"
-  }
-
-  async function onSubmit(data: FormData) {
-    try {
-      setIsSubmitting(true)
-
-      const validationError = validateForm({ ...data, platos: platosAsignados })
-      if (validationError) {
-        toast.error(validationError)
-        return
-      }
-
-      const result = await createMenuSemanalAction({
-        ...data,
-        platos: platosAsignados,
-      })
-
-      if (result.success) {
-        toast.success("Menú semanal creado exitosamente")
-        router.push("/gama/menus")
-        router.refresh()
-      } else {
-        toast.error(result.error || "Error al crear el menú semanal")
-      }
-    } catch (error) {
-      console.error("Error creating menu:", error)
-      toast.error("Error inesperado al crear el menú semanal")
-    } finally {
-      setIsSubmitting(false)
+  const handleSubmit = async (estado: "borrador" | "publicado") => {
+    if (!nombre || !fechaInicio || !fechaFin) {
+      toast.error("Por favor completa todos los campos requeridos")
+      return
     }
+
+    // Verificar que hay al menos un plato
+    const totalPlatos = Object.values(menuPlatos).reduce((acc, dia) => {
+      return acc + Object.values(dia).reduce((dayAcc, categoria) => dayAcc + categoria.length, 0)
+    }, 0)
+
+    if (totalPlatos === 0) {
+      toast.error("Debes agregar al menos un plato al menú")
+      return
+    }
+
+    startTransition(async () => {
+      try {
+        // Convertir estructura para el backend
+        const platosParaBackend: { [key: string]: Array<{ id: string; nombre: string; tipo: string }> } = {}
+
+        Object.entries(menuPlatos).forEach(([dia, categorias]) => {
+          platosParaBackend[dia] = []
+          Object.entries(categorias).forEach(([categoria, platos]) => {
+            platosParaBackend[dia].push(...platos)
+          })
+        })
+
+        if (isEditing && menu) {
+          const result = await updateMenuSemanal(menu.id, {
+            nombre,
+            fecha_inicio: fechaInicio,
+            fecha_fin: fechaFin,
+            estado,
+            platos: platosParaBackend,
+          })
+          
+          if (result.success) {
+            toast.success(`Menú ${estado === "publicado" ? "publicado" : "actualizado"} exitosamente`)
+            router.push("/gama/menus")
+          } else {
+            toast.error(result.error || "Error al actualizar el menú")
+          }
+        } else {
+          const result = await createMenuSemanal({
+            nombre,
+            fecha_inicio: fechaInicio,
+            fecha_fin: fechaFin,
+            estado,
+            platos: platosParaBackend,
+          })
+
+          if (result.success) {
+            toast.success(`Menú ${estado === "publicado" ? "publicado" : "guardado como borrador"} exitosamente`)
+            router.push("/gama/menus")
+          } else {
+            toast.error(result.error || "Error al crear el menú")
+          }
+        }
+      } catch (error) {
+        console.error("Error:", error)
+        toast.error("Error inesperado al procesar el menú")
+      }
+    })
+  }
+
+  const handleCancel = () => {
+    router.push("/gama/menus")
+  }
+
+  const getCategoriaFromTipo = (tipo: string): string => {
+    return TIPO_TO_CATEGORIA[tipo as keyof typeof TIPO_TO_CATEGORIA] || "principales"
+  }
+
+  if (loadingPlatos) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p>Cargando platos...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="bg-primary/10 p-3 rounded-lg">
+            <ChefHat className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold">{isEditing ? "Editar Menú Semanal" : "Armado de Menú Semanal"}</h2>
+            <p className="text-muted-foreground">
+              Menú completo: 5 principales, 2 entradas, 4 postres por día
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleCancel}>
+            Cancelar
+          </Button>
+          <Button variant="outline" onClick={() => handleSubmit("borrador")} disabled={isPending}>
+            <Save className="h-4 w-4 mr-2" />
+            Guardar Borrador
+          </Button>
+          <Button onClick={() => handleSubmit("publicado")} disabled={isPending}>
+            <Send className="h-4 w-4 mr-2" />
+            Publicar Menú
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Formulario y días de la semana */}
+        <div className="lg:col-span-3 space-y-6">
           {/* Información básica */}
           <Card>
             <CardHeader>
@@ -180,174 +377,192 @@ export function MenuSemanalForm({ platosDisponibles = [], initialData }: MenuSem
                 <Calendar className="h-5 w-5" />
                 Información del Menú
               </CardTitle>
-              <CardDescription>Configura las fechas y estado del menú semanal</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="fecha_inicio"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fecha de Inicio</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="fecha_fin"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fecha de Fin</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="activo"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel className="text-base">Menú Activo</FormLabel>
-                        <FormDescription>El menú está disponible para las empresas</FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="publicado"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel className="text-base">Publicado</FormLabel>
-                        <FormDescription>El menú es visible para los empleados</FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Agregar platos */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Agregar Platos</CardTitle>
-              <CardDescription>Selecciona platos para cada día de la semana</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <FormLabel>Plato</FormLabel>
-                  <Select value={selectedPlato} onValueChange={setSelectedPlato}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un plato" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {platosDisponibles.map((plato) => (
-                        <SelectItem key={plato.id} value={plato.id}>
-                          {plato.nombre} ({plato.tipo})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-2">
+                  <Label htmlFor="nombre">Nombre del Menú</Label>
+                  <Input
+                    id="nombre"
+                    value={nombre}
+                    onChange={(e) => setNombre(e.target.value)}
+                    placeholder="Ej: Menú Semana 1"
+                  />
                 </div>
-
-                <div>
-                  <FormLabel>Día de la Semana</FormLabel>
-                  <Select value={selectedDia} onValueChange={setSelectedDia}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un día" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DIAS_SEMANA.map((dia) => (
-                        <SelectItem key={dia.value} value={dia.value.toString()}>
-                          {dia.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-2">
+                  <Label htmlFor="fecha-inicio">Fecha Inicio</Label>
+                  <Input
+                    id="fecha-inicio"
+                    type="date"
+                    value={fechaInicio}
+                    onChange={(e) => setFechaInicio(e.target.value)}
+                  />
                 </div>
-
-                <div className="flex items-end">
-                  <Button type="button" onClick={agregarPlato} className="w-full">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Agregar
-                  </Button>
+                <div className="space-y-2">
+                  <Label htmlFor="fecha-fin">Fecha Fin</Label>
+                  <Input id="fecha-fin" type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Platos asignados */}
-          {platosAsignados.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Platos del Menú ({platosAsignados.length})</CardTitle>
-                <CardDescription>Platos programados para esta semana</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {platosAsignados.map((plato, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Badge variant="outline">{getDiaNombre(plato.dia_semana)}</Badge>
-                        <span className="font-medium">{getPlatoNombre(plato.plato_id)}</span>
+          {/* Días de la semana */}
+          <div className="space-y-4">
+            {DIAS_SEMANA.map((dia) => (
+              <Card key={dia.key}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <ChefHat className="h-4 w-4" />
+                    {dia.label}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {CATEGORIAS.map((categoria) => (
+                      <div key={categoria.key} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium text-sm">{categoria.label}</h4>
+                          <Badge variant="outline" className="text-xs">
+                            {menuPlatos[dia.key as keyof MenuPlatos][categoria.key as keyof MenuPlatos["lunes"]].length}/
+                            {categoria.max}
+                          </Badge>
+                        </div>
+                        <div className="min-h-[120px] space-y-2 p-3 bg-gray-50 rounded-lg">
+                          {menuPlatos[dia.key as keyof MenuPlatos][categoria.key as keyof MenuPlatos["lunes"]].length === 0 ? (
+                            <div className="flex items-center justify-center h-20 text-muted-foreground text-sm border-2 border-dashed border-muted-foreground/25 rounded-lg">
+                              Sin {categoria.label.toLowerCase()}
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {menuPlatos[dia.key as keyof MenuPlatos][categoria.key as keyof MenuPlatos["lunes"]].map((plato) => (
+                                <div key={plato.id} className="p-2 bg-white rounded border shadow-sm">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-medium text-xs truncate">{plato.nombre}</p>
+                                      <Badge variant="secondary" className={`text-xs mt-1 ${categoria.color}`}>
+                                        {plato.tipo.replace("_", " ")}
+                                      </Badge>
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => quitarPlato(plato.id, dia.key, categoria.key)}
+                                      className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removerPlato(index)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Botones de acción */}
-          <div className="flex gap-4">
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>Guardando...</>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  Crear Menú
-                </>
-              )}
-            </Button>
-            <Button type="button" variant="outline" onClick={() => router.back()}>
-              Cancelar
-            </Button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </form>
-      </Form>
+        </div>
+
+        {/* Platos disponibles */}
+        <div className="lg:col-span-1">
+          <Card className="sticky top-6">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2">
+                <Eye className="h-4 w-4" />
+                Platos Disponibles
+              </CardTitle>
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar plato..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Filtrar por categoría" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todas las categorías</SelectItem>
+                    {CATEGORIAS.map((categoria) => (
+                      <SelectItem key={categoria.key} value={categoria.key}>
+                        {categoria.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[600px]">
+                <div className="p-2 space-y-1">
+                  {platosFiltrados.map((plato) => {
+                    const categoria = getCategoriaFromTipo(plato.tipo)
+                    const categoriaConfig = CATEGORIAS.find((c) => c.key === categoria)
+                    
+                    return (
+                      <div key={plato.id} className="group hover:bg-gray-50 p-2 rounded border-b border-gray-100">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{plato.nombre}</p>
+                            <Badge
+                              variant="secondary"
+                              className={`text-xs ${categoriaConfig?.color || "bg-gray-100 text-gray-800"}`}
+                            >
+                              {plato.tipo.replace("_", " ")}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        {/* Botones para agregar a cada día */}
+                        <div className="flex flex-wrap gap-1">
+                          {DIAS_SEMANA.map((dia) => {
+                            const diaKey = dia.key as keyof MenuPlatos
+                            const categoriaKey = categoria as keyof MenuPlatos["lunes"]
+                            const yaAgregado = menuPlatos[diaKey][categoriaKey].some((p) => p.id === plato.id)
+                            const limiteAlcanzado = menuPlatos[diaKey][categoriaKey].length >= (categoriaConfig?.max || 0)
+
+                            return (
+                              <button
+                                key={dia.key}
+                                onClick={() => agregarPlato(plato, dia.key, categoria)}
+                                disabled={yaAgregado || limiteAlcanzado}
+                                className={`
+                                  px-2 py-1 text-xs rounded transition-colors
+                                  ${yaAgregado 
+                                    ? 'bg-green-100 text-green-700 cursor-not-allowed' 
+                                    : limiteAlcanzado
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                                  }
+                                `}
+                              >
+                                {yaAgregado ? '✓' : '+'} {dia.label.slice(0, 3)}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {platosFiltrados.length === 0 && (
+                    <div className="text-center text-muted-foreground py-8">
+                      {searchTerm || filtroCategoria !== "todos" ? "No se encontraron platos" : "No hay platos disponibles"}
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   )
 }

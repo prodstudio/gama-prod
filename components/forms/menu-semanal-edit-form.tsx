@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Search, Plus, X } from 'lucide-react'
-import { createMenuSemanal, updateMenuSemanal } from "@/lib/actions/menus-actions"
+import { updateMenuSemanal } from "@/lib/actions/menus-actions"
 import { toast } from "sonner"
 
 interface Plato {
@@ -30,13 +30,12 @@ interface Menu {
   fecha_inicio: string
   fecha_fin: string
   publicado: boolean
-  menu_platos?: MenuPlato[]
+  menu_platos: MenuPlato[]
 }
 
-interface MenuSemanalFormProps {
-  menu?: Menu
+interface MenuSemanalEditFormProps {
+  menu: Menu
   platosDisponibles: Plato[]
-  isEditing?: boolean
 }
 
 const DIAS_SEMANA = [
@@ -61,16 +60,16 @@ const TIPO_TO_CATEGORIA: { [key: string]: string } = {
   'postre': 'postre'
 }
 
-export function MenuSemanalForm({ menu, platosDisponibles, isEditing = false }: MenuSemanalFormProps) {
+export function MenuSemanalEditForm({ menu, platosDisponibles }: MenuSemanalEditFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   
   // Estado del formulario
-  const [nombre, setNombre] = useState(menu?.nombre || '')
-  const [fechaInicio, setFechaInicio] = useState(menu?.fecha_inicio || '')
-  const [fechaFin, setFechaFin] = useState(menu?.fecha_fin || '')
+  const [nombre, setNombre] = useState(menu.nombre)
+  const [fechaInicio, setFechaInicio] = useState(menu.fecha_inicio)
+  const [fechaFin, setFechaFin] = useState(menu.fecha_fin)
   
-  // Estado del menú semanal - inicializar con datos existentes si es edición
+  // Estado del menú semanal - inicializar con datos existentes
   const [menuSemanal, setMenuSemanal] = useState(() => {
     const inicial: { [key: string]: { [key: string]: Plato[] } } = {}
     
@@ -82,15 +81,13 @@ export function MenuSemanalForm({ menu, platosDisponibles, isEditing = false }: 
       })
     })
     
-    // Llenar con datos existentes si es edición
-    if (isEditing && menu?.menu_platos) {
-      menu.menu_platos.forEach(menuPlato => {
-        const categoria = TIPO_TO_CATEGORIA[menuPlato.platos.tipo] || 'plato_principal'
-        if (inicial[menuPlato.dia_semana] && inicial[menuPlato.dia_semana][categoria]) {
-          inicial[menuPlato.dia_semana][categoria].push(menuPlato.platos)
-        }
-      })
-    }
+    // Llenar con datos existentes
+    menu.menu_platos?.forEach(menuPlato => {
+      const categoria = TIPO_TO_CATEGORIA[menuPlato.platos.tipo] || 'plato_principal'
+      if (inicial[menuPlato.dia_semana] && inicial[menuPlato.dia_semana][categoria]) {
+        inicial[menuPlato.dia_semana][categoria].push(menuPlato.platos)
+      }
+    })
     
     return inicial
   })
@@ -168,21 +165,17 @@ export function MenuSemanalForm({ menu, platosDisponibles, isEditing = false }: 
           })
         })
 
-        if (isEditing && menu) {
-          const result = await updateMenuSemanal(menu.id, formData)
-          if (result?.success === false) {
-            toast.error(result.error || 'Error al actualizar el menú')
-          } else {
-            toast.success(`Menú ${publicar ? 'publicado' : 'actualizado'} correctamente`)
-            router.push('/gama/menus')
-          }
+        const result = await updateMenuSemanal(menu.id, formData)
+        
+        if (result?.success === false) {
+          toast.error(result.error || 'Error al actualizar el menú')
         } else {
-          await createMenuSemanal(formData)
-          toast.success(`Menú ${publicar ? 'publicado' : 'creado'} correctamente`)
+          toast.success(`Menú ${publicar ? 'publicado' : 'guardado'} correctamente`)
+          router.push('/gama/menus')
         }
       } catch (error) {
         console.error('Error:', error)
-        toast.error(isEditing ? 'Error al actualizar el menú' : 'Error al crear el menú')
+        toast.error('Error al actualizar el menú')
       }
     })
   }

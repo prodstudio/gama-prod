@@ -1,392 +1,312 @@
-import { Suspense } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Users, Building2, ChefHat, Utensils, Calendar, TrendingUp, AlertCircle, Plus } from 'lucide-react'
-import Link from "next/link"
-import { supabaseAdmin } from "@/lib/supabase/admin"
+'use client'
 
-async function getDashboardStats() {
-  try {
-    // Obtener estadísticas básicas
-    const [empresasResult, ingredientesResult, platosResult, planesResult] = await Promise.all([
-      supabaseAdmin.from("empresas").select("id, nombre, activo").limit(1000),
-      supabaseAdmin.from("ingredientes").select("id, nombre, activo").limit(1000),
-      supabaseAdmin.from("platos").select("id, nombre, activo").limit(1000),
-      supabaseAdmin.from("planes").select("id, nombre, activo").limit(1000),
-    ])
+import { useState, useEffect } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Eye, Calendar, TrendingUp, Users, ChefHat } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
-    const empresas = empresasResult.data || []
-    const ingredientes = ingredientesResult.data || []
-    const platos = platosResult.data || []
-    const planes = planesResult.data || []
-
-    return {
-      empresas: {
-        total: empresas.length,
-        activas: empresas.filter(e => e.activo).length,
-        inactivas: empresas.filter(e => !e.activo).length,
-      },
-      ingredientes: {
-        total: ingredientes.length,
-        activos: ingredientes.filter(i => i.activo).length,
-        inactivos: ingredientes.filter(i => !i.activo).length,
-      },
-      platos: {
-        total: platos.length,
-        activos: platos.filter(p => p.activo).length,
-        inactivos: platos.filter(p => !p.activo).length,
-      },
-      planes: {
-        total: planes.length,
-        activos: planes.filter(p => p.activo).length,
-        inactivos: planes.filter(p => !p.activo).length,
-      },
-    }
-  } catch (error) {
-    console.error("Error fetching dashboard stats:", error)
-    return {
-      empresas: { total: 0, activas: 0, inactivas: 0 },
-      ingredientes: { total: 0, activos: 0, inactivos: 0 },
-      platos: { total: 0, activos: 0, inactivos: 0 },
-      planes: { total: 0, activos: 0, inactivos: 0 },
-    }
-  }
-}
-
-async function getRecentActivity() {
-  try {
-    // Obtener actividad reciente de diferentes tablas
-    const [recentEmpresas, recentIngredientes, recentPlatos] = await Promise.all([
-      supabaseAdmin
-        .from("empresas")
-        .select("id, nombre, created_at")
-        .order("created_at", { ascending: false })
-        .limit(3),
-      supabaseAdmin
-        .from("ingredientes")
-        .select("id, nombre, created_at")
-        .order("created_at", { ascending: false })
-        .limit(3),
-      supabaseAdmin
-        .from("platos")
-        .select("id, nombre, created_at")
-        .order("created_at", { ascending: false })
-        .limit(3),
-    ])
-
-    return {
-      empresas: recentEmpresas.data || [],
-      ingredientes: recentIngredientes.data || [],
-      platos: recentPlatos.data || [],
-    }
-  } catch (error) {
-    console.error("Error fetching recent activity:", error)
-    return {
-      empresas: [],
-      ingredientes: [],
-      platos: [],
-    }
-  }
-}
-
-function StatsCard({ 
-  title, 
-  total, 
-  active, 
-  inactive, 
-  icon: Icon, 
-  href 
-}: {
-  title: string
+interface PedidoDia {
+  fecha: string
+  platos: {
+    nombre: string
+    cantidad: number
+  }[]
   total: number
-  active: number
-  inactive: number
-  icon: any
-  href: string
-}) {
-  return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{total}</div>
-        <div className="flex items-center gap-2 mt-2">
-          <Badge variant="default" className="text-xs">
-            {active} activos
-          </Badge>
-          {inactive > 0 && (
-            <Badge variant="secondary" className="text-xs">
-              {inactive} inactivos
-            </Badge>
-          )}
+}
+
+interface EstadisticasGenerales {
+  totalPedidosHoy: number
+  totalViandas: number
+  platosActivos: number
+  empresasActivas: number
+}
+
+export default function DashboardPage() {
+  const [pedidosSemana, setPedidosSemana] = useState<PedidoDia[]>([])
+  const [estadisticas, setEstadisticas] = useState<EstadisticasGenerales>({
+    totalPedidosHoy: 0,
+    totalViandas: 0,
+    platosActivos: 0,
+    empresasActivas: 0
+  })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    cargarDatosDashboard()
+  }, [])
+
+  const cargarDatosDashboard = async () => {
+    try {
+      const supabase = createClient()
+      
+      // Obtener fechas de la semana actual
+      const hoy = new Date()
+      const inicioSemana = new Date(hoy)
+      inicioSemana.setDate(hoy.getDate() - hoy.getDay() + 1) // Lunes
+      
+      const fechasSemana = []
+      for (let i = 0; i < 7; i++) {
+        const fecha = new Date(inicioSemana)
+        fecha.setDate(inicioSemana.getDate() + i)
+        fechasSemana.push(fecha.toISOString().split('T')[0])
+      }
+
+      // Simular datos de pedidos por día (aquí conectarías con tu base de datos real)
+      const pedidosSimulados: PedidoDia[] = [
+        {
+          fecha: fechasSemana[0], // Lunes
+          platos: [
+            { nombre: 'Milanesa de ternera con puré', cantidad: 85 },
+            { nombre: 'Ensalada César con pollo', cantidad: 42 },
+            { nombre: 'Pasta integral con vegetales', cantidad: 35 }
+          ],
+          total: 162
+        },
+        {
+          fecha: fechasSemana[1], // Martes
+          platos: [
+            { nombre: 'Pollo al curry con arroz', cantidad: 78 },
+            { nombre: 'Tarta de espinaca y ricota', cantidad: 55 },
+            { nombre: 'Wrap de falafel', cantidad: 29 }
+          ],
+          total: 162
+        },
+        {
+          fecha: fechasSemana[2], // Miércoles
+          platos: [],
+          total: 0
+        },
+        {
+          fecha: fechasSemana[3], // Jueves
+          platos: [
+            { nombre: 'Salmón grillado con quinoa', cantidad: 65 },
+            { nombre: 'Risotto de hongos', cantidad: 48 }
+          ],
+          total: 113
+        },
+        {
+          fecha: fechasSemana[4], // Viernes
+          platos: [
+            { nombre: 'Hamburguesa de lentejas', cantidad: 72 },
+            { nombre: 'Wok de vegetales', cantidad: 38 },
+            { nombre: 'Pizza margherita', cantidad: 45 }
+          ],
+          total: 155
+        }
+      ]
+
+      setPedidosSemana(pedidosSimulados)
+
+      // Cargar estadísticas generales
+      const [platosResult, empresasResult] = await Promise.all([
+        supabase.from('platos').select('id').eq('activo', true),
+        supabase.from('empresas').select('id').eq('activo', true)
+      ])
+
+      setEstadisticas({
+        totalPedidosHoy: 45,
+        totalViandas: 892,
+        platosActivos: platosResult.data?.length || 0,
+        empresasActivas: empresasResult.data?.length || 0
+      })
+
+    } catch (error) {
+      console.error('Error cargando datos del dashboard:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const formatearFecha = (fecha: string) => {
+    const date = new Date(fecha)
+    const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+    
+    return {
+      dia: dias[date.getDay()],
+      numero: date.getDate(),
+      mes: meses[date.getMonth()]
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p>Cargando dashboard...</p>
         </div>
-        <Link href={href}>
-          <Button variant="outline" size="sm" className="mt-3 w-full">
-            Ver todos
-          </Button>
-        </Link>
-      </CardContent>
-    </Card>
-  )
-}
-
-function RecentActivityCard({ 
-  title, 
-  items, 
-  href, 
-  icon: Icon 
-}: {
-  title: string
-  items: Array<{ id: string; nombre: string; created_at: string }>
-  href: string
-  icon: any
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Icon className="h-5 w-5" />
-          {title}
-        </CardTitle>
-        <CardDescription>Elementos creados recientemente</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No hay elementos recientes</p>
-        ) : (
-          <div className="space-y-2">
-            {items.map((item) => (
-              <div key={item.id} className="flex items-center justify-between">
-                <span className="text-sm font-medium truncate">{item.nombre}</span>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(item.created_at).toLocaleDateString()}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-        <Link href={href}>
-          <Button variant="outline" size="sm" className="mt-3 w-full">
-            Ver todos
-          </Button>
-        </Link>
-      </CardContent>
-    </Card>
-  )
-}
-
-function QuickActionsCard() {
-  const actions = [
-    {
-      title: "Nueva Empresa",
-      description: "Registrar una nueva empresa cliente",
-      href: "/gama/empresas/nueva",
-      icon: Building2,
-    },
-    {
-      title: "Nuevo Ingrediente",
-      description: "Agregar ingrediente al catálogo",
-      href: "/gama/ingredientes/nuevo",
-      icon: ChefHat,
-    },
-    {
-      title: "Nuevo Plato",
-      description: "Crear un nuevo plato",
-      href: "/gama/platos/nuevo",
-      icon: Utensils,
-    },
-    {
-      title: "Nuevo Plan",
-      description: "Diseñar un nuevo plan alimentario",
-      href: "/gama/planes/nuevo",
-      icon: Calendar,
-    },
-  ]
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Plus className="h-5 w-5" />
-          Acciones Rápidas
-        </CardTitle>
-        <CardDescription>Crear nuevos elementos</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-3">
-          {actions.map((action) => (
-            <Link key={action.href} href={action.href}>
-              <Button variant="outline" className="w-full justify-start h-auto p-3">
-                <action.icon className="h-4 w-4 mr-3" />
-                <div className="text-left">
-                  <div className="font-medium">{action.title}</div>
-                  <div className="text-xs text-muted-foreground">{action.description}</div>
-                </div>
-              </Button>
-            </Link>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-4 w-4" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-8 w-16 mb-2" />
-              <div className="flex gap-2">
-                <Skeleton className="h-5 w-16" />
-                <Skeleton className="h-5 w-16" />
-              </div>
-              <Skeleton className="h-8 w-full mt-3" />
-            </CardContent>
-          </Card>
-        ))}
       </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Card key={i}>
-            <CardHeader>
-              <Skeleton className="h-6 w-32" />
-              <Skeleton className="h-4 w-48" />
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {Array.from({ length: 3 }).map((_, j) => (
-                  <div key={j} className="flex justify-between">
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-4 w-16" />
-                  </div>
-                ))}
-              </div>
-              <Skeleton className="h-8 w-full mt-3" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-async function DashboardContent() {
-  const [stats, recentActivity] = await Promise.all([
-    getDashboardStats(),
-    getRecentActivity(),
-  ])
+    )
+  }
 
   return (
     <div className="space-y-6">
-      {/* Estadísticas principales */}
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Resumen de la producción y estadísticas generales
+          </p>
+        </div>
+      </div>
+
+      {/* Estadísticas generales */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatsCard
-          title="Empresas"
-          total={stats.empresas.total}
-          active={stats.empresas.activas}
-          inactive={stats.empresas.inactivas}
-          icon={Building2}
-          href="/gama/empresas"
-        />
-        <StatsCard
-          title="Ingredientes"
-          total={stats.ingredientes.total}
-          active={stats.ingredientes.activos}
-          inactive={stats.ingredientes.inactivos}
-          icon={ChefHat}
-          href="/gama/ingredientes"
-        />
-        <StatsCard
-          title="Platos"
-          total={stats.platos.total}
-          active={stats.platos.activos}
-          inactive={stats.platos.inactivos}
-          icon={Utensils}
-          href="/gama/platos"
-        />
-        <StatsCard
-          title="Planes"
-          total={stats.planes.total}
-          active={stats.planes.activos}
-          inactive={stats.planes.inactivos}
-          icon={Calendar}
-          href="/gama/planes"
-        />
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pedidos Hoy</CardTitle>
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{estadisticas.totalPedidosHoy}</div>
+            <p className="text-xs text-muted-foreground">
+              +12% desde ayer
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Viandas</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{estadisticas.totalViandas}</div>
+            <p className="text-xs text-muted-foreground">
+              Esta semana
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Platos Activos</CardTitle>
+            <ChefHat className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{estadisticas.platosActivos}</div>
+            <p className="text-xs text-muted-foreground">
+              En el menú
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Empresas Activas</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{estadisticas.empresasActivas}</div>
+            <p className="text-xs text-muted-foreground">
+              Clientes
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Actividad reciente y acciones rápidas */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <RecentActivityCard
-          title="Empresas Recientes"
-          items={recentActivity.empresas}
-          href="/gama/empresas"
-          icon={Building2}
-        />
-        <RecentActivityCard
-          title="Ingredientes Recientes"
-          items={recentActivity.ingredientes}
-          href="/gama/ingredientes"
-          icon={ChefHat}
-        />
-        <QuickActionsCard />
+      {/* Plan de Producción Semanal */}
+      <div>
+        <h2 className="text-2xl font-bold mb-4">Plan de Producción Semanal</h2>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {pedidosSemana.map((dia, index) => {
+            const fechaFormateada = formatearFecha(dia.fecha)
+            const tienePedidos = dia.platos.length > 0
+
+            return (
+              <Card key={dia.fecha} className="h-fit">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">
+                    {fechaFormateada.dia},
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {fechaFormateada.numero} de {fechaFormateada.mes}
+                  </p>
+                </CardHeader>
+                
+                <CardContent className="space-y-4">
+                  {tienePedidos ? (
+                    <>
+                      {/* Header de tabla */}
+                      <div className="flex justify-between text-sm font-medium text-muted-foreground border-b pb-2">
+                        <span>Plato</span>
+                        <span>Cantidad</span>
+                      </div>
+
+                      {/* Lista de platos */}
+                      <div className="space-y-3">
+                        {dia.platos.map((plato, platoIndex) => (
+                          <div key={platoIndex} className="flex justify-between items-start">
+                            <span className="text-sm flex-1 pr-2">{plato.nombre}</span>
+                            <Badge variant="secondary" className="ml-2">
+                              {plato.cantidad}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Total */}
+                      <div className="border-t pt-3">
+                        <div className="flex justify-between font-medium">
+                          <span className="text-sm text-muted-foreground">Total del día:</span>
+                          <span className="font-bold">{dia.total} viandas</span>
+                        </div>
+                      </div>
+
+                      {/* Botón Ver Lista */}
+                      <Button variant="outline" className="w-full">
+                        <Eye className="h-4 w-4 mr-2" />
+                        Ver Lista
+                      </Button>
+                    </>
+                  ) : (
+                    /* Estado vacío - sin botones */
+                    <div className="text-center py-8">
+                      <p className="text-lg font-medium">Aún no hay pedidos confirmados.</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Esperando cierre de pedidos...
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
       </div>
 
-      {/* Alertas y notificaciones */}
+      {/* Resumen de la semana */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5" />
-            Estado del Sistema
-          </CardTitle>
+          <CardTitle>Resumen de la Semana</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-2">
-            <div className="h-2 w-2 bg-green-500 rounded-full"></div>
-            <span className="text-sm">Sistema operativo - Todos los servicios funcionando correctamente</span>
-          </div>
-          <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-            <p className="text-sm text-blue-800">
-              <strong>Tip:</strong> Puedes usar las acciones rápidas para crear nuevos elementos rápidamente.
-            </p>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-primary">
+                {pedidosSemana.reduce((acc, dia) => acc + dia.total, 0)}
+              </div>
+              <p className="text-sm text-muted-foreground">Total viandas semana</p>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">
+                {pedidosSemana.filter(dia => dia.platos.length > 0).length}
+              </div>
+              <p className="text-sm text-muted-foreground">Días con producción</p>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">
+                {Math.round(pedidosSemana.reduce((acc, dia) => acc + dia.total, 0) / pedidosSemana.filter(dia => dia.platos.length > 0).length) || 0}
+              </div>
+              <p className="text-sm text-muted-foreground">Promedio por día</p>
+            </div>
           </div>
         </CardContent>
       </Card>
-    </div>
-  )
-}
-
-export default function GamaDashboardPage() {
-  return (
-    <div className="container mx-auto p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard Gama</h1>
-          <p className="text-muted-foreground">
-            Resumen general del sistema de gestión alimentaria
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="flex items-center gap-1">
-            <TrendingUp className="h-3 w-3" />
-            Sistema Activo
-          </Badge>
-        </div>
-      </div>
-
-      <Suspense fallback={<DashboardSkeleton />}>
-        <DashboardContent />
-      </Suspense>
     </div>
   )
 }

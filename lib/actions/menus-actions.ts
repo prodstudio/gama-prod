@@ -2,23 +2,24 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
-import { redirect } from "next/navigation"
 
-interface MenuData {
+interface CreateMenuData {
   nombre: string
   fecha_inicio: string
   fecha_fin: string
   estado: "borrador" | "publicado"
-  platos: {
-    [key: string]: Array<{
-      id: string
-      nombre: string
-      tipo: string
-    }>
-  }
+  platos: { [key: string]: Array<{ id: string; nombre: string; tipo: string }> }
 }
 
-const DIAS_SEMANA_MAP = {
+interface UpdateMenuData {
+  nombre: string
+  fecha_inicio: string
+  fecha_fin: string
+  estado: "borrador" | "publicado"
+  platos: { [key: string]: Array<{ id: string; nombre: string; tipo: string }> }
+}
+
+const DIAS_MAP: { [key: string]: number } = {
   lunes: 1,
   martes: 2,
   miercoles: 3,
@@ -26,152 +27,269 @@ const DIAS_SEMANA_MAP = {
   viernes: 5,
 }
 
-export async function createMenuSemanal(data: MenuData) {
+export async function createMenuSemanal(data: CreateMenuData) {
   try {
-    const supabase = await createClient()
-
-    console.log("Creando menú con datos:", data)
-
-    // Validar datos
-    if (!data.nombre || !data.fecha_inicio || !data.fecha_fin) {
-      return { success: false, error: "Faltan datos requeridos" }
-    }
-
-    // Si se va a publicar, verificar que no haya otro menú publicado
-    if (data.estado === "publicado") {
-      const { data: menuExistente, error: checkError } = await supabase
-        .from("menus_semanales")
-        .select("id, nombre")
-        .eq("publicado", true)
-        .eq("activo", true)
-        .limit(1)
-
-      if (checkError) {
-        console.error("Error verificando menús publicados:", checkError)
-        return { success: false, error: "Error verificando menús existentes" }
-      }
-
-      if (menuExistente && menuExistente.length > 0) {
-        return { 
-          success: false, 
-          error: `Ya existe un menú publicado: "${menuExistente[0].nombre}". Despublicar primero para publicar este menú.` 
-        }
-      }
-    }
+    const supabase = createClient()
 
     // Crear el menú semanal
-    const menuData = {
-      nombre: data.nombre,
-      fecha_inicio: data.fecha_inicio,
-      fecha_fin: data.fecha_fin,
-      publicado: data.estado === "publicado",
-      activo: true,
-    }
-
     const { data: menu, error: menuError } = await supabase
       .from("menus_semanales")
-      .insert(menuData)
+      .insert({
+        nombre: data.nombre,
+        fecha_inicio: data.fecha_inicio,
+        fecha_fin: data.fecha_fin,
+        publicado: data.estado === "publicado",
+      })
       .select()
       .single()
 
     if (menuError) {
-      console.error("Error creando menú:", menuError)
-      return { success: false, error: `Error al crear el menú: ${menuError.message}` }
+      console.error("Error creating menu:", menuError)
+      return { success: false, error: "Error al crear el menú" }
     }
 
-    console.log("Menú creado:", menu)
-
-    // Crear las relaciones menu-platos
+    // Insertar los platos del menú
     const menuPlatos = []
+    let orden = 1
+
     for (const [dia, platos] of Object.entries(data.platos)) {
-      if (platos && platos.length > 0) {
-        for (let i = 0; i < platos.length; i++) {
-          const diaSemana = DIAS_SEMANA_MAP[dia as keyof typeof DIAS_SEMANA_MAP]
-          if (diaSemana) {
-            menuPlatos.push({
-              menu_semanal_id: menu.id,
-              plato_id: platos[i].id,
-              dia_semana: diaSemana,
-              orden: i + 1,
-            })
-          }
-        }
+      const diaNumero = DIAS_MAP[dia]
+      if (!diaNumero) continue
+
+      for (const plato of platos) {
+        menuPlatos.push({
+          menu_semanal_id: menu.id,
+          plato_id: plato.id,
+          dia_semana: diaNumero,
+          orden: orden++,
+        })
       }
     }
 
-    console.log("Platos a insertar:", menuPlatos)
-
     if (menuPlatos.length > 0) {
-      const { error: platosError } = await supabase.from("menu_platos").insert(menuPlatos)
+      const { error: platosError } = await supabase
+        .from("menu_platos")
+        .insert(menuPlatos)
 
       if (platosError) {
-        console.error("Error insertando platos:", platosError)
-        // Si falla la inserción de platos, eliminar el menú creado
+        console.error("Error inserting menu platos:", platosError)
+        // Eliminar el menú creado si falla la inserción de platos
         await supabase.from("menus_semanales").delete().eq("id", menu.id)
-        return { success: false, error: `Error al asignar platos: ${platosError.message}` }
+        return { success: false, error: "Error al agregar los platos al menú" }
       }
     }
 
     revalidatePath("/gama/menus")
     return { success: true, data: menu }
   } catch (error) {
-    console.error("Error inesperado:", error)
+    console.error("Error in createMenuSemanal:", error)
     return { success: false, error: "Error inesperado al crear el menú" }
   }
 }
 
-// Server Action para formularios
-export async function createMenuSemanalAction(formData: FormData) {
+export async function updateMenuSemanal(menuId: string, data: UpdateMenuData) {
   try {
-    const supabase = await createClient()
+    const supabase = createClient()
 
-    // Extraer datos del FormData
-    const nombre = formData.get("nombre") as string
-    const fechaInicio = formData.get("fechaInicio") as string
-    const fechaFin = formData.get("fechaFin") as string
-    const estado = (formData.get("estado") as string) || "borrador"
-
-    console.log("Datos del formulario:", { nombre, fechaInicio, fechaFin, estado })
-
-    // Validar datos básicos
-    if (!nombre || !fechaInicio || !fechaFin) {
-      throw new Error("Faltan datos requeridos")
-    }
-
-    // Crear el menú semanal
-    const menuData = {
-      nombre,
-      fecha_inicio: fechaInicio,
-      fecha_fin: fechaFin,
-      publicado: estado === "publicado",
-      activo: true,
-    }
-
-    const { data: menu, error: menuError } = await supabase
+    // Actualizar el menú semanal
+    const { error: menuError } = await supabase
       .from("menus_semanales")
-      .insert(menuData)
+      .update({
+        nombre: data.nombre,
+        fecha_inicio: data.fecha_inicio,
+        fecha_fin: data.fecha_fin,
+        publicado: data.estado === "publicado",
+      })
+      .eq("id", menuId)
+
+    if (menuError) {
+      console.error("Error updating menu:", menuError)
+      return { success: false, error: "Error al actualizar el menú" }
+    }
+
+    // Eliminar platos existentes
+    const { error: deleteError } = await supabase
+      .from("menu_platos")
+      .delete()
+      .eq("menu_semanal_id", menuId)
+
+    if (deleteError) {
+      console.error("Error deleting existing platos:", deleteError)
+      return { success: false, error: "Error al actualizar los platos del menú" }
+    }
+
+    // Insertar los nuevos platos del menú
+    const menuPlatos = []
+    let orden = 1
+
+    for (const [dia, platos] of Object.entries(data.platos)) {
+      const diaNumero = DIAS_MAP[dia]
+      if (!diaNumero) continue
+
+      for (const plato of platos) {
+        menuPlatos.push({
+          menu_semanal_id: menuId,
+          plato_id: plato.id,
+          dia_semana: diaNumero,
+          orden: orden++,
+        })
+      }
+    }
+
+    if (menuPlatos.length > 0) {
+      const { error: platosError } = await supabase
+        .from("menu_platos")
+        .insert(menuPlatos)
+
+      if (platosError) {
+        console.error("Error inserting menu platos:", platosError)
+        return { success: false, error: "Error al actualizar los platos del menú" }
+      }
+    }
+
+    revalidatePath("/gama/menus")
+    return { success: true }
+  } catch (error) {
+    console.error("Error in updateMenuSemanal:", error)
+    return { success: false, error: "Error inesperado al actualizar el menú" }
+  }
+}
+
+export async function publishMenuAction(menuId: string) {
+  try {
+    const supabase = createClient()
+    
+    const { error } = await supabase
+      .from("menus_semanales")
+      .update({ publicado: true })
+      .eq("id", menuId)
+
+    if (error) {
+      console.error("Error publishing menu:", error)
+      return { success: false, error: "Error al publicar el menú" }
+    }
+
+    revalidatePath("/gama/menus")
+    return { success: true }
+  } catch (error) {
+    console.error("Error in publishMenuAction:", error)
+    return { success: false, error: "Error inesperado al publicar el menú" }
+  }
+}
+
+export async function duplicateMenuAction(menuId: string) {
+  try {
+    const supabase = createClient()
+
+    // Obtener el menú original
+    const { data: originalMenu, error: menuError } = await supabase
+      .from("menus_semanales")
+      .select("*")
+      .eq("id", menuId)
+      .single()
+
+    if (menuError || !originalMenu) {
+      console.error("Error fetching original menu:", menuError)
+      return { success: false, error: "Error al obtener el menú original" }
+    }
+
+    // Crear el nuevo menú
+    const { data: newMenu, error: createError } = await supabase
+      .from("menus_semanales")
+      .insert({
+        nombre: `${originalMenu.nombre} (Copia)`,
+        fecha_inicio: originalMenu.fecha_inicio,
+        fecha_fin: originalMenu.fecha_fin,
+        publicado: false, // Siempre crear como borrador
+      })
       .select()
       .single()
 
-    if (menuError) {
-      console.error("Error creando menú:", menuError)
-      throw new Error(`Error al crear el menú: ${menuError.message}`)
+    if (createError || !newMenu) {
+      console.error("Error creating new menu:", createError)
+      return { success: false, error: "Error al crear el menú duplicado" }
     }
 
-    console.log("Menú creado exitosamente:", menu)
+    // Obtener los platos del menú original
+    const { data: originalPlatos, error: platosError } = await supabase
+      .from("menu_platos")
+      .select("*")
+      .eq("menu_semanal_id", menuId)
+
+    if (platosError) {
+      console.error("Error fetching original platos:", platosError)
+      // Limpiar el menú creado
+      await supabase.from("menus_semanales").delete().eq("id", newMenu.id)
+      return { success: false, error: "Error al obtener los platos del menú original" }
+    }
+
+    // Duplicar los platos si existen
+    if (originalPlatos && originalPlatos.length > 0) {
+      const newPlatos = originalPlatos.map(plato => ({
+        menu_semanal_id: newMenu.id,
+        plato_id: plato.plato_id,
+        dia_semana: plato.dia_semana,
+        orden: plato.orden,
+      }))
+
+      const { error: insertPlatosError } = await supabase
+        .from("menu_platos")
+        .insert(newPlatos)
+
+      if (insertPlatosError) {
+        console.error("Error duplicating platos:", insertPlatosError)
+        // Limpiar el menú creado
+        await supabase.from("menus_semanales").delete().eq("id", newMenu.id)
+        return { success: false, error: "Error al duplicar los platos del menú" }
+      }
+    }
 
     revalidatePath("/gama/menus")
-    redirect("/gama/menus")
+    return { success: true, data: newMenu }
   } catch (error) {
-    console.error("Error en createMenuSemanalAction:", error)
-    throw error
+    console.error("Error in duplicateMenuAction:", error)
+    return { success: false, error: "Error inesperado al duplicar el menú" }
+  }
+}
+
+export async function deleteMenuAction(menuId: string) {
+  try {
+    const supabase = createClient()
+
+    // Primero eliminar los platos del menú
+    const { error: platosError } = await supabase
+      .from("menu_platos")
+      .delete()
+      .eq("menu_semanal_id", menuId)
+
+    if (platosError) {
+      console.error("Error deleting menu platos:", platosError)
+      return { success: false, error: "Error al eliminar los platos del menú" }
+    }
+
+    // Luego eliminar el menú
+    const { error: menuError } = await supabase
+      .from("menus_semanales")
+      .delete()
+      .eq("id", menuId)
+
+    if (menuError) {
+      console.error("Error deleting menu:", menuError)
+      return { success: false, error: "Error al eliminar el menú" }
+    }
+
+    revalidatePath("/gama/menus")
+    return { success: true }
+  } catch (error) {
+    console.error("Error in deleteMenuAction:", error)
+    return { success: false, error: "Error inesperado al eliminar el menú" }
   }
 }
 
 export async function getMenusSemanales() {
   try {
-    const supabase = await createClient()
-
+    const supabase = createClient()
+    
     const { data, error } = await supabase
       .from("menus_semanales")
       .select(`
@@ -180,16 +298,10 @@ export async function getMenusSemanales() {
         fecha_inicio,
         fecha_fin,
         publicado,
-        activo,
         created_at,
         menu_platos (
-          id,
           dia_semana,
-          orden,
           platos (
-            id,
-            nombre,
-            descripcion,
             tipo
           )
         )
@@ -197,21 +309,21 @@ export async function getMenusSemanales() {
       .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("Error obteniendo menús:", error)
-      return []
+      console.error("Error fetching menus:", error)
+      return null
     }
 
-    return data || []
+    return data
   } catch (error) {
-    console.error("Error en getMenusSemanales:", error)
-    return []
+    console.error("Error in getMenusSemanales:", error)
+    return null
   }
 }
 
 export async function getMenuSemanal(id: string) {
   try {
-    const supabase = await createClient()
-
+    const supabase = createClient()
+    
     const { data, error } = await supabase
       .from("menus_semanales")
       .select(`
@@ -220,17 +332,15 @@ export async function getMenuSemanal(id: string) {
         fecha_inicio,
         fecha_fin,
         publicado,
-        activo,
         created_at,
         menu_platos (
-          id,
           dia_semana,
           orden,
           platos (
             id,
             nombre,
-            descripcion,
-            tipo
+            tipo,
+            descripcion
           )
         )
       `)
@@ -238,103 +348,13 @@ export async function getMenuSemanal(id: string) {
       .single()
 
     if (error) {
-      console.error("Error obteniendo menú:", error)
-      throw new Error(`Error obteniendo menú: ${error.message}`)
+      console.error("Error fetching menu:", error)
+      return null
     }
 
     return data
   } catch (error) {
-    console.error("Error en getMenuSemanal:", error)
-    throw error
-  }
-}
-
-export async function deleteMenuSemanal(id: string) {
-  try {
-    const supabase = await createClient()
-
-    // Verificar autenticación
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-    if (authError || !user) {
-      throw new Error("Usuario no autenticado")
-    }
-
-    // Eliminar el menú (los platos se eliminan en cascada)
-    const { error } = await supabase.from("menus_semanales").delete().eq("id", id)
-
-    if (error) {
-      console.error("Error eliminando menú:", error)
-      throw new Error(`Error eliminando menú: ${error.message}`)
-    }
-
-    revalidatePath("/gama/menus")
-    return { success: true }
-  } catch (error) {
-    console.error("Error en deleteMenuSemanal:", error)
-    throw error
-  }
-}
-
-export async function toggleMenuPublicado(id: string) {
-  try {
-    const supabase = await createClient()
-
-    // Verificar autenticación
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-    if (authError || !user) {
-      throw new Error("Usuario no autenticado")
-    }
-
-    // Obtener estado actual
-    const { data: currentMenu, error: getError } = await supabase
-      .from("menus_semanales")
-      .select("publicado, nombre")
-      .eq("id", id)
-      .single()
-
-    if (getError) {
-      throw new Error(`Error obteniendo menú: ${getError.message}`)
-    }
-
-    // Si se va a publicar, verificar que no haya otro menú publicado
-    if (!currentMenu.publicado) {
-      const { data: menuExistente, error: checkError } = await supabase
-        .from("menus_semanales")
-        .select("id, nombre")
-        .eq("publicado", true)
-        .eq("activo", true)
-        .neq("id", id)
-        .limit(1)
-
-      if (checkError) {
-        throw new Error("Error verificando menús publicados")
-      }
-
-      if (menuExistente && menuExistente.length > 0) {
-        throw new Error(`Ya existe un menú publicado: "${menuExistente[0].nombre}". Despublicar primero para publicar este menú.`)
-      }
-    }
-
-    // Cambiar estado
-    const { error: updateError } = await supabase
-      .from("menus_semanales")
-      .update({ publicado: !currentMenu.publicado })
-      .eq("id", id)
-
-    if (updateError) {
-      throw new Error(`Error actualizando menú: ${updateError.message}`)
-    }
-
-    revalidatePath("/gama/menus")
-    return { success: true }
-  } catch (error) {
-    console.error("Error en toggleMenuPublicado:", error)
-    throw error
+    console.error("Error in getMenuSemanal:", error)
+    return null
   }
 }
