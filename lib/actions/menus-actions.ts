@@ -37,16 +37,40 @@ export async function createMenuSemanal(data: MenuData) {
       return { success: false, error: "Faltan datos requeridos" }
     }
 
+    // Si se va a publicar, verificar que no haya otro menú publicado
+    if (data.estado === "publicado") {
+      const { data: menuExistente, error: checkError } = await supabase
+        .from("menus_semanales")
+        .select("id, nombre")
+        .eq("publicado", true)
+        .eq("activo", true)
+        .limit(1)
+
+      if (checkError) {
+        console.error("Error verificando menús publicados:", checkError)
+        return { success: false, error: "Error verificando menús existentes" }
+      }
+
+      if (menuExistente && menuExistente.length > 0) {
+        return { 
+          success: false, 
+          error: `Ya existe un menú publicado: "${menuExistente[0].nombre}". Despublicar primero para publicar este menú.` 
+        }
+      }
+    }
+
     // Crear el menú semanal
+    const menuData = {
+      nombre: data.nombre,
+      fecha_inicio: data.fecha_inicio,
+      fecha_fin: data.fecha_fin,
+      publicado: data.estado === "publicado",
+      activo: true,
+    }
+
     const { data: menu, error: menuError } = await supabase
       .from("menus_semanales")
-      .insert({
-        nombre: data.nombre,
-        fecha_inicio: data.fecha_inicio,
-        fecha_fin: data.fecha_fin,
-        publicado: data.estado === "publicado",
-        activo: true,
-      })
+      .insert(menuData)
       .select()
       .single()
 
@@ -115,15 +139,17 @@ export async function createMenuSemanalAction(formData: FormData) {
     }
 
     // Crear el menú semanal
+    const menuData = {
+      nombre,
+      fecha_inicio: fechaInicio,
+      fecha_fin: fechaFin,
+      publicado: estado === "publicado",
+      activo: true,
+    }
+
     const { data: menu, error: menuError } = await supabase
       .from("menus_semanales")
-      .insert({
-        nombre,
-        fecha_inicio: fechaInicio,
-        fecha_fin: fechaFin,
-        publicado: estado === "publicado",
-        activo: true,
-      })
+      .insert(menuData)
       .select()
       .single()
 
@@ -163,7 +189,8 @@ export async function getMenusSemanales() {
           platos (
             id,
             nombre,
-            descripcion
+            descripcion,
+            tipo
           )
         )
       `)
@@ -203,8 +230,7 @@ export async function getMenuSemanal(id: string) {
             id,
             nombre,
             descripcion,
-            precio,
-            categoria
+            tipo
           )
         )
       `)
@@ -268,12 +294,31 @@ export async function toggleMenuPublicado(id: string) {
     // Obtener estado actual
     const { data: currentMenu, error: getError } = await supabase
       .from("menus_semanales")
-      .select("publicado")
+      .select("publicado, nombre")
       .eq("id", id)
       .single()
 
     if (getError) {
       throw new Error(`Error obteniendo menú: ${getError.message}`)
+    }
+
+    // Si se va a publicar, verificar que no haya otro menú publicado
+    if (!currentMenu.publicado) {
+      const { data: menuExistente, error: checkError } = await supabase
+        .from("menus_semanales")
+        .select("id, nombre")
+        .eq("publicado", true)
+        .eq("activo", true)
+        .neq("id", id)
+        .limit(1)
+
+      if (checkError) {
+        throw new Error("Error verificando menús publicados")
+      }
+
+      if (menuExistente && menuExistente.length > 0) {
+        throw new Error(`Ya existe un menú publicado: "${menuExistente[0].nombre}". Despublicar primero para publicar este menú.`)
+      }
     }
 
     // Cambiar estado

@@ -7,7 +7,7 @@ async function getIngredientesDisponibles() {
 
   const { data: ingredientes, error } = await supabase
     .from("ingredientes")
-    .select("*")
+    .select("id, nombre, categoria, unidad_de_medida, activo")
     .eq("activo", true)
     .order("nombre")
 
@@ -20,19 +20,21 @@ async function getIngredientesDisponibles() {
 }
 
 export default async function NuevoPlatoPage() {
+  // TODO: Validar que user.role === 'gama_admin'
+
   const ingredientesDisponibles = await getIngredientesDisponibles()
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Crear Nuevo Plato</h1>
-        <p className="text-muted-foreground">Agrega un nuevo plato al menú con sus ingredientes</p>
+        <p className="text-muted-foreground">Agrega un nuevo plato al catálogo</p>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Información del Plato</CardTitle>
-          <CardDescription>Completa los datos del nuevo plato</CardDescription>
+          <CardDescription>Completa los datos del nuevo plato y selecciona sus ingredientes</CardDescription>
         </CardHeader>
         <CardContent>
           <PlatoForm ingredientesDisponibles={ingredientesDisponibles} />

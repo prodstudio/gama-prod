@@ -1,263 +1,319 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/admin"
+import { empresaSchema, sucursalSchema } from "@/lib/validations/empresas"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
-import { z } from "zod"
 
-const empresaSchema = z.object({
-  nombre: z.string().min(1, "El nombre es requerido"),
-  email: z.string().email("Email inválido"),
-  telefono: z.string().min(1, "El teléfono es requerido"),
-  direccion: z.string().min(1, "La dirección es requerida"),
-  descuento_porcentaje: z.number().min(0).max(100).default(0),
-})
+export async function createEmpresaAction(formData: FormData) {
+  // TODO: Cuando reactivemos auth, validar que user.role === 'gama_admin'
 
-const sucursalSchema = z.object({
-  nombre: z.string().min(1, "El nombre es requerido"),
-  direccion: z.string().min(1, "La dirección es requerida"),
-  responsable_nombre: z.string().optional(),
-  responsable_telefono: z.string().optional(),
-  dias_entrega: z.array(z.number()).default([1, 2, 3, 4, 5]),
-})
+  console.log("=== CREATE EMPRESA ACTION ===")
+  console.log("FormData entries:", Array.from(formData.entries()))
 
-export async function createEmpresa(formData: FormData) {
-  try {
-    const supabase = await createClient()
+  const rawData = {
+    nombre: (formData.get("nombre") as string)?.trim() || "",
+    email_contacto: (formData.get("email_contacto") as string)?.trim() || "",
+    telefono: (formData.get("telefono") as string)?.trim() || "",
+    direccion: (formData.get("direccion") as string)?.trim() || "",
+    plan_id: (formData.get("plan_id") as string)?.trim() || "",
+    descuento_porcentaje: Number.parseFloat((formData.get("descuento_porcentaje") as string) || "0"),
+    activa: formData.get("activa") !== "false",
+  }
 
-    // Validar datos de empresa
-    const empresaData = {
-      nombre: formData.get("nombre") as string,
-      email: formData.get("email") as string,
-      telefono: formData.get("telefono") as string,
-      direccion: formData.get("direccion") as string,
-      descuento_porcentaje: Number.parseFloat(formData.get("descuento_porcentaje") as string) || 0,
+  console.log("Raw data:", rawData)
+
+  // Validar datos de empresa
+  const validatedFields = empresaSchema.safeParse(rawData)
+
+  if (!validatedFields.success) {
+    console.error("Validation errors:", validatedFields.error.flatten())
+    return {
+      error: "Datos inválidos",
+      fieldErrors: validatedFields.error.flatten().fieldErrors,
     }
+  }
 
-    const validatedEmpresa = empresaSchema.parse(empresaData)
+  console.log("Validated data:", validatedFields.data)
 
-    // Crear empresa
-    const { data: empresa, error: empresaError } = await supabase
-      .from("empresas")
-      .insert([validatedEmpresa])
-      .select()
-      .single()
+  // Limpiar campos vacíos - convertir strings vacíos a null
+  const cleanData = {
+    nombre: validatedFields.data.nombre,
+    email_contacto: validatedFields.data.email_contacto || null,
+    telefono: validatedFields.data.telefono || null,
+    direccion: validatedFields.data.direccion || null,
+    plan_id: validatedFields.data.plan_id || null,
+    descuento_porcentaje: validatedFields.data.descuento_porcentaje || 0,
+    activa: validatedFields.data.activa,
+  }
 
-    if (empresaError) {
-      console.error("Error creating empresa:", empresaError)
-      throw new Error("Error al crear la empresa")
+  console.log("Clean data for insert:", cleanData)
+
+  // Crear empresa
+  const { data: empresaData, error: empresaError } = await supabaseAdmin
+    .from("empresas")
+    .insert(cleanData)
+    .select()
+    .single()
+
+  if (empresaError) {
+    console.error("Supabase error creating empresa:", empresaError)
+    return {
+      error: `Error al crear la empresa: ${empresaError.message}`,
     }
+  }
 
-    // Procesar sucursales
-    const sucursalesData = []
-    let index = 0
+  console.log("Empresa created successfully:", empresaData)
 
-    while (formData.get(`sucursales[${index}][nombre]`)) {
-      const diasEntregaStr = formData.get(`sucursales[${index}][dias_entrega]`) as string
-      let diasEntrega = [1, 2, 3, 4, 5] // Default
+  // Procesar sucursales si existen
+  const sucursalesData = formData.get("sucursales") as string
+  if (sucursalesData) {
+    try {
+      const sucursales = JSON.parse(sucursalesData)
+      console.log("Sucursales to create:", sucursales)
 
-      if (diasEntregaStr) {
-        try {
-          diasEntrega = JSON.parse(diasEntregaStr)
-        } catch {
-          diasEntrega = diasEntregaStr
-            .split(",")
-            .map((d) => Number.parseInt(d.trim()))
-            .filter((d) => !isNaN(d))
+      for (const sucursal of sucursales) {
+        const sucursalToInsert = {
+          nombre: sucursal.nombre,
+          direccion: sucursal.direccion,
+          telefono: sucursal.responsable_telefono || null,
+          responsable_nombre: sucursal.responsable_nombre,
+          responsable_telefono: sucursal.responsable_telefono || null,
+          dias_entrega: sucursal.dias_entrega,
+          empresa_id: empresaData.id,
+          activa: true,
+        }
+
+        const { error: sucursalError } = await supabaseAdmin.from("sucursales").insert(sucursalToInsert)
+
+        if (sucursalError) {
+          console.error("Error creating sucursal:", sucursalError)
+          // Continuar con las demás sucursales aunque una falle
         }
       }
-
-      const sucursalData = {
-        empresa_id: empresa.id,
-        nombre: formData.get(`sucursales[${index}][nombre]`) as string,
-        direccion: formData.get(`sucursales[${index}][direccion]`) as string,
-        responsable_nombre: (formData.get(`sucursales[${index}][responsable_nombre]`) as string) || null,
-        responsable_telefono: (formData.get(`sucursales[${index}][responsable_telefono]`) as string) || null,
-        dias_entrega: diasEntrega,
-      }
-
-      const validatedSucursal = sucursalSchema.parse(sucursalData)
-      sucursalesData.push(validatedSucursal)
-      index++
+    } catch (error) {
+      console.error("Error parsing sucursales data:", error)
     }
-
-    // Crear sucursales si existen
-    if (sucursalesData.length > 0) {
-      const { error: sucursalesError } = await supabase.from("sucursales").insert(sucursalesData)
-
-      if (sucursalesError) {
-        console.error("Error creating sucursales:", sucursalesError)
-        throw new Error("Error al crear las sucursales")
-      }
-    }
-
-    revalidatePath("/gama/empresas")
-    redirect("/gama/empresas")
-  } catch (error) {
-    console.error("Error in createEmpresa:", error)
-    throw error
   }
+
+  revalidatePath("/gama/empresas")
+  redirect("/gama/empresas")
 }
 
-export async function updateEmpresa(id: string, formData: FormData) {
-  try {
-    const supabase = await createClient()
+export async function updateEmpresaAction(id: string, formData: FormData) {
+  // TODO: Cuando reactivemos auth, validar que user.role === 'gama_admin'
 
-    // Validar datos de empresa
-    const empresaData = {
-      nombre: formData.get("nombre") as string,
-      email: formData.get("email") as string,
-      telefono: formData.get("telefono") as string,
-      direccion: formData.get("direccion") as string,
-      descuento_porcentaje: Number.parseFloat(formData.get("descuento_porcentaje") as string) || 0,
-    }
-
-    const validatedEmpresa = empresaSchema.parse(empresaData)
-
-    // Actualizar empresa
-    const { error: empresaError } = await supabase.from("empresas").update(validatedEmpresa).eq("id", id)
-
-    if (empresaError) {
-      console.error("Error updating empresa:", empresaError)
-      throw new Error("Error al actualizar la empresa")
-    }
-
-    revalidatePath("/gama/empresas")
-    revalidatePath(`/gama/empresas/${id}`)
-    redirect("/gama/empresas")
-  } catch (error) {
-    console.error("Error in updateEmpresa:", error)
-    throw error
+  const rawData = {
+    nombre: (formData.get("nombre") as string)?.trim() || "",
+    email_contacto: (formData.get("email_contacto") as string)?.trim() || "",
+    telefono: (formData.get("telefono") as string)?.trim() || "",
+    direccion: (formData.get("direccion") as string)?.trim() || "",
+    plan_id: (formData.get("plan_id") as string)?.trim() || "",
+    descuento_porcentaje: Number.parseFloat((formData.get("descuento_porcentaje") as string) || "0"),
+    activa: formData.get("activa") !== "false",
   }
+
+  const validatedFields = empresaSchema.safeParse(rawData)
+
+  if (!validatedFields.success) {
+    return {
+      error: "Datos inválidos",
+      fieldErrors: validatedFields.error.flatten().fieldErrors,
+    }
+  }
+
+  const cleanData = {
+    nombre: validatedFields.data.nombre,
+    email_contacto: validatedFields.data.email_contacto || null,
+    telefono: validatedFields.data.telefono || null,
+    direccion: validatedFields.data.direccion || null,
+    plan_id: validatedFields.data.plan_id || null,
+    descuento_porcentaje: validatedFields.data.descuento_porcentaje || 0,
+    activa: validatedFields.data.activa,
+  }
+
+  const { data, error } = await supabaseAdmin.from("empresas").update(cleanData).eq("id", id).select()
+
+  if (error) {
+    console.error("Error updating empresa:", error)
+    return {
+      error: `Error al actualizar la empresa: ${error.message}`,
+    }
+  }
+
+  revalidatePath("/gama/empresas")
+  revalidatePath(`/gama/empresas/${id}`)
+  redirect("/gama/empresas")
 }
 
-export async function deleteEmpresa(id: string) {
-  try {
-    const supabase = await createClient()
+export async function deleteEmpresaAction(id: string) {
+  // TODO: Cuando reactivemos auth, validar que user.role === 'gama_admin'
 
-    // Eliminar sucursales primero
-    const { error: sucursalesError } = await supabase.from("sucursales").delete().eq("empresa_id", id)
+  // Verificar si la empresa tiene usuarios asociados
+  const { data: usuariosAsociados } = await supabaseAdmin.from("users").select("id").eq("empresa_id", id).limit(1)
 
-    if (sucursalesError) {
-      console.error("Error deleting sucursales:", sucursalesError)
-      throw new Error("Error al eliminar las sucursales")
+  if (usuariosAsociados && usuariosAsociados.length > 0) {
+    return {
+      error: "No se puede eliminar la empresa porque tiene usuarios asociados.",
     }
-
-    // Eliminar empresa
-    const { error: empresaError } = await supabase.from("empresas").delete().eq("id", id)
-
-    if (empresaError) {
-      console.error("Error deleting empresa:", empresaError)
-      throw new Error("Error al eliminar la empresa")
-    }
-
-    revalidatePath("/gama/empresas")
-  } catch (error) {
-    console.error("Error in deleteEmpresa:", error)
-    throw error
   }
-}
 
-export async function createSucursal(empresaId: string, formData: FormData) {
-  try {
-    const supabase = await createClient()
+  // Verificar si la empresa tiene pedidos a través de sus sucursales
+  const { data: sucursales } = await supabaseAdmin.from("sucursales").select("id").eq("empresa_id", id)
 
-    const diasEntregaStr = formData.get("dias_entrega") as string
-    let diasEntrega = [1, 2, 3, 4, 5] // Default
+  if (sucursales && sucursales.length > 0) {
+    const sucursalIds = sucursales.map((s) => s.id)
+    const { data: pedidosAsociados } = await supabaseAdmin
+      .from("pedidos")
+      .select("id")
+      .in("sucursal_id", sucursalIds)
+      .limit(1)
 
-    if (diasEntregaStr) {
-      try {
-        diasEntrega = JSON.parse(diasEntregaStr)
-      } catch {
-        diasEntrega = diasEntregaStr
-          .split(",")
-          .map((d) => Number.parseInt(d.trim()))
-          .filter((d) => !isNaN(d))
+    if (pedidosAsociados && pedidosAsociados.length > 0) {
+      return {
+        error: "No se puede eliminar la empresa porque tiene pedidos asociados.",
       }
     }
-
-    const sucursalData = {
-      empresa_id: empresaId,
-      nombre: formData.get("nombre") as string,
-      direccion: formData.get("direccion") as string,
-      responsable_nombre: (formData.get("responsable_nombre") as string) || null,
-      responsable_telefono: (formData.get("responsable_telefono") as string) || null,
-      dias_entrega: diasEntrega,
-    }
-
-    const validatedSucursal = sucursalSchema.parse(sucursalData)
-
-    const { error } = await supabase.from("sucursales").insert([validatedSucursal])
-
-    if (error) {
-      console.error("Error creating sucursal:", error)
-      throw new Error("Error al crear la sucursal")
-    }
-
-    revalidatePath("/gama/empresas")
-    revalidatePath(`/gama/empresas/${empresaId}`)
-  } catch (error) {
-    console.error("Error in createSucursal:", error)
-    throw error
   }
+
+  const { error } = await supabaseAdmin.from("empresas").delete().eq("id", id)
+
+  if (error) {
+    console.error("Error deleting empresa:", error)
+    return {
+      error: "Error al eliminar la empresa. Intenta nuevamente.",
+    }
+  }
+
+  revalidatePath("/gama/empresas")
+  return { success: true }
 }
 
-export async function updateSucursal(id: string, formData: FormData) {
-  try {
-    const supabase = await createClient()
+// Actions para sucursales
+export async function createSucursalAction(empresaId: string, formData: FormData) {
+  // TODO: Cuando reactivemos auth, validar permisos
 
-    const diasEntregaStr = formData.get("dias_entrega") as string
-    let diasEntrega = [1, 2, 3, 4, 5] // Default
-
-    if (diasEntregaStr) {
-      try {
-        diasEntrega = JSON.parse(diasEntregaStr)
-      } catch {
-        diasEntrega = diasEntregaStr
-          .split(",")
-          .map((d) => Number.parseInt(d.trim()))
-          .filter((d) => !isNaN(d))
-      }
-    }
-
-    const sucursalData = {
-      nombre: formData.get("nombre") as string,
-      direccion: formData.get("direccion") as string,
-      responsable_nombre: (formData.get("responsable_nombre") as string) || null,
-      responsable_telefono: (formData.get("responsable_telefono") as string) || null,
-      dias_entrega: diasEntrega,
-    }
-
-    const validatedSucursal = sucursalSchema.omit({ empresa_id: true }).parse(sucursalData)
-
-    const { error } = await supabase.from("sucursales").update(validatedSucursal).eq("id", id)
-
-    if (error) {
-      console.error("Error updating sucursal:", error)
-      throw new Error("Error al actualizar la sucursal")
-    }
-
-    revalidatePath("/gama/empresas")
-  } catch (error) {
-    console.error("Error in updateSucursal:", error)
-    throw error
+  const rawData = {
+    nombre: (formData.get("nombre") as string)?.trim() || "",
+    direccion: (formData.get("direccion") as string)?.trim() || "",
+    telefono: (formData.get("telefono") as string)?.trim() || "",
+    responsable_nombre: (formData.get("responsable_nombre") as string)?.trim() || "",
+    responsable_telefono: (formData.get("responsable_telefono") as string)?.trim() || "",
+    dias_entrega: JSON.parse((formData.get("dias_entrega") as string) || "[1,2,3,4,5]"),
+    activa: formData.get("activa") !== "false",
   }
+
+  const validatedFields = sucursalSchema.safeParse(rawData)
+
+  if (!validatedFields.success) {
+    return {
+      error: "Datos inválidos",
+      fieldErrors: validatedFields.error.flatten().fieldErrors,
+    }
+  }
+
+  const sucursalData = {
+    nombre: validatedFields.data.nombre,
+    direccion: validatedFields.data.direccion,
+    telefono: validatedFields.data.telefono || null,
+    responsable_nombre: validatedFields.data.responsable_nombre,
+    responsable_telefono: validatedFields.data.responsable_telefono || null,
+    dias_entrega: validatedFields.data.dias_entrega,
+    empresa_id: empresaId,
+    activa: validatedFields.data.activa,
+  }
+
+  const { data, error } = await supabaseAdmin.from("sucursales").insert(sucursalData).select()
+
+  if (error) {
+    console.error("Error creating sucursal:", error)
+    return {
+      error: "Error al crear la sucursal. Intenta nuevamente.",
+    }
+  }
+
+  revalidatePath(`/gama/empresas/${empresaId}`)
+  return { success: true, data: data[0] }
 }
 
-export async function deleteSucursal(id: string) {
-  try {
-    const supabase = await createClient()
+export async function updateSucursalAction(id: string, formData: FormData) {
+  // TODO: Cuando reactivemos auth, validar permisos
 
-    const { error } = await supabase.from("sucursales").delete().eq("id", id)
-
-    if (error) {
-      console.error("Error deleting sucursal:", error)
-      throw new Error("Error al eliminar la sucursal")
-    }
-
-    revalidatePath("/gama/empresas")
-  } catch (error) {
-    console.error("Error in deleteSucursal:", error)
-    throw error
+  const rawData = {
+    nombre: (formData.get("nombre") as string)?.trim() || "",
+    direccion: (formData.get("direccion") as string)?.trim() || "",
+    telefono: (formData.get("telefono") as string)?.trim() || "",
+    responsable_nombre: (formData.get("responsable_nombre") as string)?.trim() || "",
+    responsable_telefono: (formData.get("responsable_telefono") as string)?.trim() || "",
+    dias_entrega: JSON.parse((formData.get("dias_entrega") as string) || "[1,2,3,4,5]"),
+    activa: formData.get("activa") !== "false",
   }
+
+  const validatedFields = sucursalSchema.safeParse(rawData)
+
+  if (!validatedFields.success) {
+    return {
+      error: "Datos inválidos",
+      fieldErrors: validatedFields.error.flatten().fieldErrors,
+    }
+  }
+
+  const cleanData = {
+    nombre: validatedFields.data.nombre,
+    direccion: validatedFields.data.direccion,
+    telefono: validatedFields.data.telefono || null,
+    responsable_nombre: validatedFields.data.responsable_nombre,
+    responsable_telefono: validatedFields.data.responsable_telefono || null,
+    dias_entrega: validatedFields.data.dias_entrega,
+    activa: validatedFields.data.activa,
+  }
+
+  const { data, error } = await supabaseAdmin.from("sucursales").update(cleanData).eq("id", id).select()
+
+  if (error) {
+    console.error("Error updating sucursal:", error)
+    return {
+      error: "Error al actualizar la sucursal. Intenta nuevamente.",
+    }
+  }
+
+  // Obtener empresa_id para revalidar
+  const { data: sucursal } = await supabaseAdmin.from("sucursales").select("empresa_id").eq("id", id).single()
+
+  if (sucursal) {
+    revalidatePath(`/gama/empresas/${sucursal.empresa_id}`)
+  }
+
+  return { success: true, data: data[0] }
+}
+
+export async function deleteSucursalAction(id: string) {
+  // TODO: Cuando reactivemos auth, validar permisos
+
+  // Verificar si la sucursal tiene pedidos
+  const { data: pedidosAsociados } = await supabaseAdmin.from("pedidos").select("id").eq("sucursal_id", id).limit(1)
+
+  if (pedidosAsociados && pedidosAsociados.length > 0) {
+    return {
+      error: "No se puede eliminar la sucursal porque tiene pedidos asociados.",
+    }
+  }
+
+  // Obtener empresa_id antes de eliminar
+  const { data: sucursal } = await supabaseAdmin.from("sucursales").select("empresa_id").eq("id", id).single()
+
+  const { error } = await supabaseAdmin.from("sucursales").delete().eq("id", id)
+
+  if (error) {
+    console.error("Error deleting sucursal:", error)
+    return {
+      error: "Error al eliminar la sucursal. Intenta nuevamente.",
+    }
+  }
+
+  if (sucursal) {
+    revalidatePath(`/gama/empresas/${sucursal.empresa_id}`)
+  }
+
+  return { success: true }
 }

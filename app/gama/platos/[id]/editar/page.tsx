@@ -36,10 +36,28 @@ async function getPlato(id: string) {
     .single()
 
   if (error || !plato) {
+    console.error("Error fetching plato:", error)
     return null
   }
 
   return plato
+}
+
+async function getIngredientesDisponibles() {
+  const supabase = createServerClient()
+
+  const { data: ingredientes, error } = await supabase
+    .from("ingredientes")
+    .select("id, nombre, categoria, unidad_de_medida, activo")
+    .eq("activo", true)
+    .order("nombre")
+
+  if (error) {
+    console.error("Error fetching ingredientes:", error)
+    return []
+  }
+
+  return ingredientes || []
 }
 
 export default async function EditarPlatoPage({
@@ -55,7 +73,11 @@ export default async function EditarPlatoPage({
 
   // TODO: Validar que user.role === 'gama_admin'
 
-  const plato = await getPlato(params.id)
+  // Obtener el plato y los ingredientes disponibles en paralelo
+  const [plato, ingredientesDisponibles] = await Promise.all([
+    getPlato(params.id),
+    getIngredientesDisponibles()
+  ])
 
   if (!plato) {
     notFound()
@@ -74,7 +96,7 @@ export default async function EditarPlatoPage({
           <CardDescription>Actualiza los datos del plato y sus ingredientes</CardDescription>
         </CardHeader>
         <CardContent>
-          <PlatoForm plato={plato} />
+          <PlatoForm plato={plato} ingredientesDisponibles={ingredientesDisponibles} />
         </CardContent>
       </Card>
     </div>

@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Plus, X, Calendar, Save, Send, ChefHat } from "lucide-react"
+import { Search, Plus, X, Calendar, Save, Send, ChefHat, Eye } from 'lucide-react'
 import { toast } from "sonner"
 import { createMenuSemanal } from "@/lib/actions/menus-actions"
 import { createClient } from "@/lib/supabase/client"
@@ -23,11 +23,31 @@ interface Plato {
 }
 
 interface MenuPlatos {
-  lunes: Plato[]
-  martes: Plato[]
-  miercoles: Plato[]
-  jueves: Plato[]
-  viernes: Plato[]
+  lunes: {
+    principales: Plato[]
+    entradas: Plato[]
+    postres: Plato[]
+  }
+  martes: {
+    principales: Plato[]
+    entradas: Plato[]
+    postres: Plato[]
+  }
+  miercoles: {
+    principales: Plato[]
+    entradas: Plato[]
+    postres: Plato[]
+  }
+  jueves: {
+    principales: Plato[]
+    entradas: Plato[]
+    postres: Plato[]
+  }
+  viernes: {
+    principales: Plato[]
+    entradas: Plato[]
+    postres: Plato[]
+  }
 }
 
 const DIAS_SEMANA = [
@@ -38,12 +58,18 @@ const DIAS_SEMANA = [
   { key: "viernes", label: "Viernes" },
 ]
 
-const TIPO_COLORS = {
-  plato_principal: "bg-blue-100 text-blue-800",
-  entrada: "bg-green-100 text-green-800",
-  postre: "bg-purple-100 text-purple-800",
-  ensalada: "bg-yellow-100 text-yellow-800",
-  sopa: "bg-orange-100 text-orange-800",
+const CATEGORIAS = [
+  { key: "principales", label: "Principales", max: 5, color: "bg-blue-100 text-blue-800" },
+  { key: "entradas", label: "Entradas", max: 2, color: "bg-green-100 text-green-800" },
+  { key: "postres", label: "Postres", max: 4, color: "bg-purple-100 text-purple-800" },
+]
+
+const TIPO_TO_CATEGORIA = {
+  plato_principal: "principales",
+  entrada: "entradas", 
+  postre: "postres",
+  ensalada: "entradas",
+  sopa: "entradas",
 }
 
 export function MenuSemanalDragDropForm() {
@@ -54,14 +80,13 @@ export function MenuSemanalDragDropForm() {
   const [platosDisponibles, setPlatosDisponibles] = useState<Plato[]>([])
   const [platosFiltrados, setPlatosFiltrados] = useState<Plato[]>([])
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedPlato, setSelectedPlato] = useState("")
-  const [selectedDia, setSelectedDia] = useState("")
+  const [filtroCategoria, setFiltroCategoria] = useState<string>("todos")
   const [menuPlatos, setMenuPlatos] = useState<MenuPlatos>({
-    lunes: [],
-    martes: [],
-    miercoles: [],
-    jueves: [],
-    viernes: [],
+    lunes: { principales: [], entradas: [], postres: [] },
+    martes: { principales: [], entradas: [], postres: [] },
+    miercoles: { principales: [], entradas: [], postres: [] },
+    jueves: { principales: [], entradas: [], postres: [] },
+    viernes: { principales: [], entradas: [], postres: [] },
   })
   const [loading, setLoading] = useState(false)
   const [loadingPlatos, setLoadingPlatos] = useState(true)
@@ -75,6 +100,8 @@ export function MenuSemanalDragDropForm() {
           .from("platos")
           .select("id, nombre, tipo, descripcion")
           .neq("tipo", "bebida") // Excluir bebidas
+          .eq("activo", true)
+          .order("tipo")
           .order("nombre")
 
         if (error) {
@@ -96,19 +123,29 @@ export function MenuSemanalDragDropForm() {
     loadPlatos()
   }, [])
 
-  // Filtrar platos por búsqueda
+  // Filtrar platos por búsqueda y categoría
   useEffect(() => {
-    if (!searchTerm) {
-      setPlatosFiltrados(platosDisponibles)
-    } else {
-      const filtered = platosDisponibles.filter(
+    let filtered = platosDisponibles
+
+    // Filtrar por búsqueda
+    if (searchTerm) {
+      filtered = filtered.filter(
         (plato) =>
           plato.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
           plato.tipo.toLowerCase().includes(searchTerm.toLowerCase()),
       )
-      setPlatosFiltrados(filtered)
     }
-  }, [searchTerm, platosDisponibles])
+
+    // Filtrar por categoría
+    if (filtroCategoria !== "todos") {
+      const tiposPermitidos = Object.keys(TIPO_TO_CATEGORIA).filter(
+        (tipo) => TIPO_TO_CATEGORIA[tipo as keyof typeof TIPO_TO_CATEGORIA] === filtroCategoria,
+      )
+      filtered = filtered.filter((plato) => tiposPermitidos.includes(plato.tipo))
+    }
+
+    setPlatosFiltrados(filtered)
+  }, [searchTerm, filtroCategoria, platosDisponibles])
 
   // Generar nombre automático basado en fechas
   useEffect(() => {
@@ -134,67 +171,45 @@ export function MenuSemanalDragDropForm() {
     }
   }, [fechaInicio, fechaFin])
 
-  const agregarPlatoConSelector = () => {
-    if (!selectedPlato || !selectedDia) {
-      toast.error("Selecciona un plato y un día")
+  const agregarPlato = (plato: Plato, dia: string, categoria: string) => {
+    const categoriaConfig = CATEGORIAS.find((c) => c.key === categoria)
+    const diaKey = dia as keyof MenuPlatos
+    const categoriaKey = categoria as keyof MenuPlatos["lunes"]
+
+    // Verificar límite
+    if (menuPlatos[diaKey][categoriaKey].length >= (categoriaConfig?.max || 0)) {
+      toast.error(`Máximo ${categoriaConfig?.max} ${categoriaConfig?.label.toLowerCase()} por día`)
       return
     }
 
-    const plato = platosDisponibles.find((p) => p.id === selectedPlato)
-    if (!plato) return
-
-    if (menuPlatos[selectedDia as keyof MenuPlatos].some((p) => p.id === plato.id)) {
-      toast.error("Este plato ya está agregado a este día")
-      return
-    }
-
-    setMenuPlatos((prev) => ({
-      ...prev,
-      [selectedDia]: [...prev[selectedDia as keyof MenuPlatos], plato],
-    }))
-
-    // Limpiar selección
-    setSelectedPlato("")
-    setSelectedDia("")
-    toast.success("Plato agregado exitosamente")
-  }
-
-  const agregarPlato = (plato: Plato, dia: string) => {
-    if (menuPlatos[dia as keyof MenuPlatos].some((p) => p.id === plato.id)) {
-      toast.error("Este plato ya está agregado a este día")
+    // Verificar duplicado
+    if (menuPlatos[diaKey][categoriaKey].some((p) => p.id === plato.id)) {
+      toast.error("Este plato ya está agregado a esta categoría")
       return
     }
 
     setMenuPlatos((prev) => ({
       ...prev,
-      [dia]: [...prev[dia as keyof MenuPlatos], plato],
+      [dia]: {
+        ...prev[dia],
+        [categoria]: [...prev[dia][categoriaKey], plato],
+      },
     }))
     toast.success("Plato agregado exitosamente")
   }
 
-  const quitarPlato = (platoId: string, dia: string) => {
+  const quitarPlato = (platoId: string, dia: string, categoria: string) => {
+    const diaKey = dia as keyof MenuPlatos
+    const categoriaKey = categoria as keyof MenuPlatos["lunes"]
+
     setMenuPlatos((prev) => ({
       ...prev,
-      [dia]: prev[dia as keyof MenuPlatos].filter((p) => p.id !== platoId),
+      [dia]: {
+        ...prev[dia],
+        [categoria]: prev[dia][categoriaKey].filter((p) => p.id !== platoId),
+      },
     }))
     toast.success("Plato eliminado")
-  }
-
-  const moverPlato = (platoId: string, diaOrigen: string, diaDestino: string) => {
-    const plato = menuPlatos[diaOrigen as keyof MenuPlatos].find((p) => p.id === platoId)
-    if (!plato) return
-
-    if (menuPlatos[diaDestino as keyof MenuPlatos].some((p) => p.id === plato.id)) {
-      toast.error("Este plato ya está agregado al día destino")
-      return
-    }
-
-    setMenuPlatos((prev) => ({
-      ...prev,
-      [diaOrigen]: prev[diaOrigen as keyof MenuPlatos].filter((p) => p.id !== platoId),
-      [diaDestino]: [...prev[diaDestino as keyof MenuPlatos], plato],
-    }))
-    toast.success("Plato movido exitosamente")
   }
 
   const handleSubmit = async (estado: "borrador" | "publicado") => {
@@ -204,7 +219,10 @@ export function MenuSemanalDragDropForm() {
     }
 
     // Verificar que hay al menos un plato
-    const totalPlatos = Object.values(menuPlatos).reduce((acc, platos) => acc + platos.length, 0)
+    const totalPlatos = Object.values(menuPlatos).reduce((acc, dia) => {
+      return acc + Object.values(dia).reduce((dayAcc, categoria) => dayAcc + categoria.length, 0)
+    }, 0)
+
     if (totalPlatos === 0) {
       toast.error("Debes agregar al menos un plato al menú")
       return
@@ -213,12 +231,22 @@ export function MenuSemanalDragDropForm() {
     setLoading(true)
 
     try {
+      // Convertir estructura para el backend
+      const platosParaBackend: { [key: string]: Array<{ id: string; nombre: string; tipo: string }> } = {}
+
+      Object.entries(menuPlatos).forEach(([dia, categorias]) => {
+        platosParaBackend[dia] = []
+        Object.entries(categorias).forEach(([categoria, platos]) => {
+          platosParaBackend[dia].push(...platos)
+        })
+      })
+
       const result = await createMenuSemanal({
         nombre,
         fecha_inicio: fechaInicio,
         fecha_fin: fechaFin,
         estado,
-        platos: menuPlatos,
+        platos: platosParaBackend,
       })
 
       if (result.success) {
@@ -239,6 +267,10 @@ export function MenuSemanalDragDropForm() {
     router.push("/gama/menus")
   }
 
+  const getCategoriaFromTipo = (tipo: string): string => {
+    return TIPO_TO_CATEGORIA[tipo as keyof typeof TIPO_TO_CATEGORIA] || "principales"
+  }
+
   if (loadingPlatos) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -254,9 +286,16 @@ export function MenuSemanalDragDropForm() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Crear Menú Semanal</h1>
-          <p className="text-muted-foreground">Selecciona los platos para cada día de la semana</p>
+        <div className="flex items-center gap-4">
+          <div className="bg-primary/10 p-3 rounded-lg">
+            <ChefHat className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold">Armado de Menú Semanal</h2>
+            <p className="text-muted-foreground">
+              Menú completo: 5 principales, 2 entradas, 4 postres por día
+            </p>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleCancel}>
@@ -309,57 +348,13 @@ export function MenuSemanalDragDropForm() {
                   <Input id="fecha-fin" type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} />
                 </div>
               </div>
-
-              {/* Selector rápido para agregar platos */}
-              <Separator />
-              <div className="space-y-2">
-                <Label>Agregar Plato Rápido</Label>
-                <div className="flex gap-2">
-                  <Select value={selectedPlato} onValueChange={setSelectedPlato}>
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder="Seleccionar plato..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {platosDisponibles.map((plato) => (
-                        <SelectItem key={plato.id} value={plato.id}>
-                          <div className="flex items-center gap-2">
-                            <span>{plato.nombre}</span>
-                            <Badge
-                              variant="secondary"
-                              className={`text-xs ${TIPO_COLORS[plato.tipo as keyof typeof TIPO_COLORS] || "bg-gray-100 text-gray-800"}`}
-                            >
-                              {plato.tipo.replace("_", " ")}
-                            </Badge>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={selectedDia} onValueChange={setSelectedDia}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue placeholder="Día..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DIAS_SEMANA.map((dia) => (
-                        <SelectItem key={dia.key} value={dia.key}>
-                          {dia.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button onClick={agregarPlatoConSelector} disabled={!selectedPlato || !selectedDia}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Agregar
-                  </Button>
-                </div>
-              </div>
             </CardContent>
           </Card>
 
           {/* Días de la semana */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="space-y-4">
             {DIAS_SEMANA.map((dia) => (
-              <Card key={dia.key} className="h-fit">
+              <Card key={dia.key}>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg flex items-center gap-2">
                     <ChefHat className="h-4 w-4" />
@@ -367,53 +362,48 @@ export function MenuSemanalDragDropForm() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="min-h-[200px] space-y-2">
-                    {menuPlatos[dia.key as keyof MenuPlatos].length === 0 ? (
-                      <div className="flex items-center justify-center h-32 text-muted-foreground text-sm border-2 border-dashed border-muted-foreground/25 rounded-lg">
-                        No hay platos asignados
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {menuPlatos[dia.key as keyof MenuPlatos].map((plato, index) => (
-                          <div key={plato.id} className="p-3 bg-white rounded-lg border shadow-sm">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm truncate">{plato.nombre}</p>
-                                <Badge
-                                  variant="secondary"
-                                  className={`text-xs mt-1 ${TIPO_COLORS[plato.tipo as keyof typeof TIPO_COLORS] || "bg-gray-100 text-gray-800"}`}
-                                >
-                                  {plato.tipo.replace("_", " ")}
-                                </Badge>
-                              </div>
-                              <div className="flex gap-1">
-                                {/* Botón para mover a otro día */}
-                                <Select onValueChange={(nuevoDia) => moverPlato(plato.id, dia.key, nuevoDia)}>
-                                  <SelectTrigger className="h-6 w-6 p-0">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {DIAS_SEMANA.filter((d) => d.key !== dia.key).map((otroDia) => (
-                                      <SelectItem key={otroDia.key} value={otroDia.key}>
-                                        Mover a {otroDia.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => quitarPlato(plato.id, dia.key)}
-                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {CATEGORIAS.map((categoria) => (
+                      <div key={categoria.key} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium text-sm">{categoria.label}</h4>
+                          <Badge variant="outline" className="text-xs">
+                            {menuPlatos[dia.key as keyof MenuPlatos][categoria.key as keyof MenuPlatos["lunes"]].length}/
+                            {categoria.max}
+                          </Badge>
+                        </div>
+                        <div className="min-h-[120px] space-y-2 p-3 bg-gray-50 rounded-lg">
+                          {menuPlatos[dia.key as keyof MenuPlatos][categoria.key as keyof MenuPlatos["lunes"]].length === 0 ? (
+                            <div className="flex items-center justify-center h-20 text-muted-foreground text-sm border-2 border-dashed border-muted-foreground/25 rounded-lg">
+                              Sin {categoria.label.toLowerCase()}
                             </div>
-                          </div>
-                        ))}
+                          ) : (
+                            <div className="space-y-2">
+                              {menuPlatos[dia.key as keyof MenuPlatos][categoria.key as keyof MenuPlatos["lunes"]].map((plato) => (
+                                <div key={plato.id} className="p-2 bg-white rounded border shadow-sm">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-medium text-xs truncate">{plato.nombre}</p>
+                                      <Badge variant="secondary" className={`text-xs mt-1 ${categoria.color}`}>
+                                        {plato.tipo.replace("_", " ")}
+                                      </Badge>
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => quitarPlato(plato.id, dia.key, categoria.key)}
+                                      className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    )}
+                    ))}
                   </div>
                 </CardContent>
               </Card>
@@ -424,60 +414,92 @@ export function MenuSemanalDragDropForm() {
         {/* Platos disponibles */}
         <div className="lg:col-span-1">
           <Card className="sticky top-6">
-            <CardHeader>
-              <CardTitle>Platos Disponibles</CardTitle>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar plato..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9"
-                />
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2">
+                <Eye className="h-4 w-4" />
+                Platos Disponibles
+              </CardTitle>
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar plato..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Filtrar por categoría" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todas las categorías</SelectItem>
+                    {CATEGORIAS.map((categoria) => (
+                      <SelectItem key={categoria.key} value={categoria.key}>
+                        {categoria.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="h-[600px]">
-                <div className="p-4 space-y-2">
-                  {platosFiltrados.map((plato) => (
-                    <div key={plato.id} className="p-3 bg-white rounded-lg border hover:shadow-md transition-shadow">
-                      <div className="space-y-2">
-                        <div className="flex items-start justify-between gap-2">
+                <div className="p-2 space-y-1">
+                  {platosFiltrados.map((plato) => {
+                    const categoria = getCategoriaFromTipo(plato.tipo)
+                    const categoriaConfig = CATEGORIAS.find((c) => c.key === categoria)
+                    
+                    return (
+                      <div key={plato.id} className="group hover:bg-gray-50 p-2 rounded border-b border-gray-100">
+                        <div className="flex items-center justify-between gap-2 mb-2">
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm truncate">{plato.nombre}</p>
                             <Badge
                               variant="secondary"
-                              className={`text-xs ${TIPO_COLORS[plato.tipo as keyof typeof TIPO_COLORS] || "bg-gray-100 text-gray-800"}`}
+                              className={`text-xs ${categoriaConfig?.color || "bg-gray-100 text-gray-800"}`}
                             >
                               {plato.tipo.replace("_", " ")}
                             </Badge>
                           </div>
                         </div>
 
-                        {/* Botones para agregar a cada día */}
-                        <Separator />
+                        {/* Botones minimalistas para agregar a cada día */}
                         <div className="flex flex-wrap gap-1">
-                          {DIAS_SEMANA.map((dia) => (
-                            <Button
-                              key={dia.key}
-                              size="sm"
-                              variant="outline"
-                              onClick={() => agregarPlato(plato, dia.key)}
-                              className="h-6 px-2 text-xs"
-                              disabled={menuPlatos[dia.key as keyof MenuPlatos].some((p) => p.id === plato.id)}
-                            >
-                              <Plus className="h-3 w-3 mr-1" />
-                              {dia.label.slice(0, 3)}
-                            </Button>
-                          ))}
+                          {DIAS_SEMANA.map((dia) => {
+                            const diaKey = dia.key as keyof MenuPlatos
+                            const categoriaKey = categoria as keyof MenuPlatos["lunes"]
+                            const yaAgregado = menuPlatos[diaKey][categoriaKey].some((p) => p.id === plato.id)
+                            const limiteAlcanzado = menuPlatos[diaKey][categoriaKey].length >= (categoriaConfig?.max || 0)
+
+                            return (
+                              <button
+                                key={dia.key}
+                                onClick={() => agregarPlato(plato, dia.key, categoria)}
+                                disabled={yaAgregado || limiteAlcanzado}
+                                className={`
+                                  px-2 py-1 text-xs rounded transition-colors
+                                  ${yaAgregado 
+                                    ? 'bg-green-100 text-green-700 cursor-not-allowed' 
+                                    : limiteAlcanzado
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                                  }
+                                `}
+                              >
+                                {yaAgregado ? '✓' : '+'} {dia.label.slice(0, 3)}
+                              </button>
+                            )
+                          })}
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
 
                   {platosFiltrados.length === 0 && (
                     <div className="text-center text-muted-foreground py-8">
-                      {searchTerm ? "No se encontraron platos" : "No hay platos disponibles"}
+                      {searchTerm || filtroCategoria !== "todos" ? "No se encontraron platos" : "No hay platos disponibles"}
                     </div>
                   )}
                 </div>

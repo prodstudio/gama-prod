@@ -7,7 +7,6 @@
     "clean": "rm -rf .next node_modules pnpm-lock.yaml",
     "dev": "next dev",
     "fix-lockfile": "node scripts/fix-lockfile.js",
-    "fix-server-actions": "node scripts/fix-server-actions.js",
     "lint": "next lint",
     "start": "next start"
   },

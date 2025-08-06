@@ -3,6 +3,7 @@
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { platoSchema } from "@/lib/validations/platos"
 import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
 
 export async function createPlatoAction(formData: FormData) {
   // TODO: Cuando reactivemos auth, validar que user.role === 'gama_admin'
@@ -12,7 +13,7 @@ export async function createPlatoAction(formData: FormData) {
     descripcion: (formData.get("descripcion") as string)?.trim() || "",
     tipo: (formData.get("tipo") as string)?.trim() || "",
     imagen_url: (formData.get("imagen_url") as string)?.trim() || "",
-    activo: formData.get("activo") !== "false",
+    activo: formData.get("activo") === 'on' || formData.get("activo") === 'true',
   }
 
   // Obtener ingredientes del FormData
@@ -24,6 +25,7 @@ export async function createPlatoAction(formData: FormData) {
       ingredientes = JSON.parse(ingredientesRaw)
     } catch (error) {
       console.error("Error parsing ingredientes:", error)
+      throw new Error("Formato de ingredientes inválido.")
     }
   }
 
@@ -35,10 +37,10 @@ export async function createPlatoAction(formData: FormData) {
 
   if (!validatedFields.success) {
     console.error("Validation errors:", validatedFields.error.flatten())
-    throw new Error("Datos inválidos")
+    throw new Error("Datos del plato inválidos.")
   }
 
-  // Limpiar campos opcionales
+  // Limpiar campos opcionales para la inserción
   const cleanData = {
     nombre: validatedFields.data.nombre,
     descripcion: validatedFields.data.descripcion || null,
@@ -67,14 +69,15 @@ export async function createPlatoAction(formData: FormData) {
       plato_id: platoCreado.id,
       ingrediente_id: ing.ingrediente_id,
       cantidad: ing.cantidad,
-      unidad_medida: "gramos", // valor por defecto
     }))
 
-    const { error: ingredientesError } = await supabaseAdmin.from("plato_ingredientes").insert(relacionesIngredientes)
+    const { error: ingredientesError } = await supabaseAdmin
+      .from("plato_ingredientes")
+      .insert(relacionesIngredientes)
 
     if (ingredientesError) {
       console.error("Error creating plato-ingredientes relations:", ingredientesError)
-      // Eliminar el plato si falló la creación de ingredientes
+      // Si falla la inserción de ingredientes, eliminamos el plato recién creado
       await supabaseAdmin.from("platos").delete().eq("id", platoCreado.id)
       throw new Error(`Error al asociar ingredientes: ${ingredientesError.message}`)
     } else {
@@ -83,7 +86,7 @@ export async function createPlatoAction(formData: FormData) {
   }
 
   revalidatePath("/gama/platos")
-  return { success: true, data: platoCreado }
+  redirect("/gama/platos")
 }
 
 export async function updatePlatoAction(id: string, formData: FormData) {
@@ -94,10 +97,9 @@ export async function updatePlatoAction(id: string, formData: FormData) {
     descripcion: (formData.get("descripcion") as string)?.trim() || "",
     tipo: (formData.get("tipo") as string)?.trim() || "",
     imagen_url: (formData.get("imagen_url") as string)?.trim() || "",
-    activo: formData.get("activo") !== "false",
+    activo: formData.get("activo") === 'on' || formData.get("activo") === 'true',
   }
 
-  // Obtener ingredientes del FormData
   const ingredientesRaw = formData.get("ingredientes") as string
   let ingredientes: Array<{ ingrediente_id: string; cantidad: number }> = []
 
@@ -106,13 +108,18 @@ export async function updatePlatoAction(id: string, formData: FormData) {
       ingredientes = JSON.parse(ingredientesRaw)
     } catch (error) {
       console.error("Error parsing ingredientes:", error)
+      throw new Error("Formato de ingredientes inválido.")
     }
   }
+
+  console.log("Updating plato with data:", rawData)
+  console.log("Ingredientes:", ingredientes)
 
   const validatedFields = platoSchema.safeParse(rawData)
 
   if (!validatedFields.success) {
-    throw new Error("Datos inválidos")
+    console.error("Validation errors:", validatedFields.error.flatten())
+    throw new Error("Datos del plato inválidos.")
   }
 
   const cleanData = {
@@ -136,13 +143,20 @@ export async function updatePlatoAction(id: string, formData: FormData) {
     throw new Error(`Error al actualizar el plato: ${platoError.message}`)
   }
 
+  console.log("Plato updated successfully:", platoActualizado)
+
   // Eliminar relaciones existentes
-  const { error: deleteError } = await supabaseAdmin.from("plato_ingredientes").delete().eq("plato_id", id)
+  const { error: deleteError } = await supabaseAdmin
+    .from("plato_ingredientes")
+    .delete()
+    .eq("plato_id", id)
 
   if (deleteError) {
     console.error("Error deleting existing plato-ingredientes relations:", deleteError)
     throw new Error(`Error al actualizar ingredientes: ${deleteError.message}`)
   }
+
+  console.log("Existing plato-ingredientes relations deleted")
 
   // Crear nuevas relaciones si hay ingredientes
   if (ingredientes.length > 0) {
@@ -150,20 +164,23 @@ export async function updatePlatoAction(id: string, formData: FormData) {
       plato_id: id,
       ingrediente_id: ing.ingrediente_id,
       cantidad: ing.cantidad,
-      unidad_medida: "gramos", // valor por defecto
     }))
 
-    const { error: ingredientesError } = await supabaseAdmin.from("plato_ingredientes").insert(relacionesIngredientes)
+    const { error: ingredientesError } = await supabaseAdmin
+      .from("plato_ingredientes")
+      .insert(relacionesIngredientes)
 
     if (ingredientesError) {
       console.error("Error creating new plato-ingredientes relations:", ingredientesError)
-      throw new Error(`Error al asociar ingredientes: ${ingredientesError.message}`)
+      throw new Error(`Error al asociar nuevos ingredientes: ${ingredientesError.message}`)
+    } else {
+      console.log("New plato-ingredientes relations created successfully")
     }
   }
 
   revalidatePath("/gama/platos")
   revalidatePath(`/gama/platos/${id}`)
-  return { success: true, data: platoActualizado }
+  redirect("/gama/platos")
 }
 
 export async function deletePlato(id: string) {

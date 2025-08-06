@@ -75,11 +75,21 @@ export function PlatoForm({ plato, ingredientesDisponibles = [] }: PlatoFormProp
     setIsSubmitting(true)
 
     try {
-      // Filtrar ingredientes válidos (que tengan ingrediente_id y cantidad > 0)
-      const ingredientesValidos = selectedIngredientes.filter((ing) => ing.ingrediente_id && ing.cantidad > 0)
+      // 1. Filtrar ingredientes que son válidos para guardar
+      const ingredientesValidos = selectedIngredientes.filter(
+        (ing) => ing.ingrediente_id && ing.cantidad > 0
+      )
 
-      // Agregar ingredientes al FormData
-      formData.set("ingredientes", JSON.stringify(ingredientesValidos))
+      // 2. *** MODIFICACIÓN CLAVE ***
+      // Se crea un nuevo array que contiene SÓLO los campos que existen en la tabla 'plato_ingredientes'.
+      // Esto evita enviar datos extra (como 'unidad_de_medida') que causaban el error en la base de datos.
+      const ingredientesParaGuardar = ingredientesValidos.map((ing) => ({
+        ingrediente_id: ing.ingrediente_id,
+        cantidad: ing.cantidad,
+      }));
+
+      // 3. Agregar la lista de ingredientes ya limpia al FormData para enviarla a la Server Action.
+      formData.set("ingredientes", JSON.stringify(ingredientesParaGuardar))
 
       if (plato) {
         await updatePlatoAction(plato.id, formData)
@@ -147,15 +157,34 @@ export function PlatoForm({ plato, ingredientesDisponibles = [] }: PlatoFormProp
         />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="imagen_url">URL de imagen</Label>
-        <Input
-          id="imagen_url"
-          name="imagen_url"
-          type="url"
-          defaultValue={plato?.imagen_url || ""}
-          placeholder="https://ejemplo.com/imagen.jpg"
-        />
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="imagen_url">Imagen del plato</Label>
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Upload de archivo */}
+            <div className="space-y-2">
+              <Label htmlFor="imagen_file" className="text-sm text-muted-foreground">
+                Subir desde dispositivo
+              </Label>
+              <Input id="imagen_file" name="imagen_file" type="file" accept="image/*" className="cursor-pointer" />
+              <p className="text-xs text-muted-foreground">Formatos: JPG, PNG, WebP (máx. 5MB)</p>
+            </div>
+
+            {/* URL manual */}
+            <div className="space-y-2">
+              <Label htmlFor="imagen_url" className="text-sm text-muted-foreground">
+                O ingresa una URL
+              </Label>
+              <Input
+                id="imagen_url"
+                name="imagen_url"
+                type="url"
+                defaultValue={plato?.imagen_url || ""}
+                placeholder="https://ejemplo.com/imagen.jpg"
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="flex items-center space-x-2">
